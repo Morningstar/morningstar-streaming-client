@@ -90,8 +90,7 @@ Create an `appsettings.json` file with the following structure:
 ```json
 {
   "AppConfig": {
-    "StreamingApiBaseAddress": "https://streaming.morningstar.com",
-    "Environment": "production"
+    "StreamingApiBaseAddress": "https://streaming.morningstar.com"
   },
   "EndpointConfig": {
     "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
