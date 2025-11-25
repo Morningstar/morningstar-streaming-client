@@ -65,6 +65,7 @@ namespace Morningstar.Streaming.Client.Clients
         Func<string, Task> onMessageAsync,
         CancellationToken cancellationToken)
         {
+            const int maxAttempts = 3;
             int attempt = 0;
 
             while (!cancellationToken.IsCancellationRequested)
@@ -77,9 +78,12 @@ namespace Morningstar.Streaming.Client.Clients
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
+                    // Reset attempt counter after successful connection
+                    attempt = 0;
+
                     await StartReceiveLoopAsync(ws, onMessageAsync, cancellationToken);
                     
-                    // Connection ended - loop will retry
+                    // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
                 }
                 catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
@@ -90,7 +94,14 @@ namespace Morningstar.Streaming.Client.Clients
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "WebSocket failed (attempt {Attempt}). Reconnecting...", attempt);
+                    logger.LogWarning(ex, "WebSocket failed (attempt {Attempt} of {MaxAttempts}). Reconnecting...", attempt, maxAttempts);
+
+                    // Check if we've exhausted all attempts
+                    if (attempt >= maxAttempts)
+                    {
+                        logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
+                        throw;
+                    }
 
                     // Check if cancellation was requested before delaying
                     if (cancellationToken.IsCancellationRequested)

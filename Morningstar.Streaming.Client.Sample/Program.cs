@@ -29,7 +29,7 @@ class Program
     {
         Console.WriteLine("=================================================");
         Console.WriteLine("Morningstar Streaming Client - Sample Application");
-        Console.WriteLine("=================================================\n");
+        Console.WriteLine("=================================================");
 
         // Build the host with dependency injection and configuration
         var host = CreateHostBuilder(args).Build();
@@ -37,7 +37,7 @@ class Program
         // Run the example
         await RunExampleAsync(host.Services);
 
-        Console.WriteLine("\nPress any key to exit...");
+        Console.WriteLine("Press any key to exit...");
         Console.ReadLine();
     }
 
@@ -86,7 +86,7 @@ class Program
             // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
             // This is just a demonstration of the Streaming API Subscription functionality
             
-            Console.WriteLine("\n--- Example: Starting a Level 1 Subscription ---");
+            Console.WriteLine("--- Example: Starting a Level 1 Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
             Console.WriteLine("1. A valid access token from your authentication provider");
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
@@ -172,7 +172,7 @@ class Program
                     response.ApiResponse.Message);
             }
 
-            logger.LogInformation("\nExample completed successfully!");
+            logger.LogInformation("Example completed successfully!");
         }
         catch (Exception ex)
         {
