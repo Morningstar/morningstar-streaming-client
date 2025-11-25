@@ -210,7 +210,7 @@ namespace Morningstar.Streaming.Client.Clients
             var acknowledgement = new MessagePacketEnvelope
             {
                 EventType = EventTypes.HeartBeatAcknowledged,
-                PublishTime = DateTimeHelper.NanosFromEpoch()
+                AcknowledgedTime = DateTimeHelper.NanosFromEpoch()
             };
 
             var json = JsonConvert.SerializeObject(acknowledgement);
