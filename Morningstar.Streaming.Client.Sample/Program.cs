@@ -93,7 +93,7 @@ class Program
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
             Console.WriteLine("3. Investment identifiers to subscribe to");
             
-            // The following code to start a subscription:
+            // Run the following code to start a subscription:
 
             var secret = await oAuthProvider.GetOAuthSecretAsync(); // Ensure OAuth secret is set up
             if(secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
