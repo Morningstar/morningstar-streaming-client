@@ -74,6 +74,7 @@ class Program
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         var canaryService = services.GetRequiredService<ICanaryService>();
+        var oAuthProvider = services.GetRequiredService<IOAuthProvider>();
 
         try
         {
@@ -84,7 +85,7 @@ class Program
 
             // Example 2: Start a new Level 1 subscription
             // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
-            // This is just a demonstration of the Streaming API Subscription functionality
+            // This is just a demonstration of the Streaming API Subscription functionality            
             
             Console.WriteLine("--- Example: Starting a Level 1 Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
@@ -92,7 +93,15 @@ class Program
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
             Console.WriteLine("3. Investment identifiers to subscribe to");
             
-            // Uncomment and modify the following code to actually start a subscription:
+            // The following code to start a subscription:
+
+            var secret = await oAuthProvider.GetOAuthSecretAsync(); // Ensure OAuth secret is set up
+            if(secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
+            {
+                Console.WriteLine("Invalid OAuth credentials. Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials.");
+                logger.LogWarning("Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials before running the subscription example.");
+                return;
+            }
             
             var subscriptionRequest = new StartSubscriptionRequest
             {

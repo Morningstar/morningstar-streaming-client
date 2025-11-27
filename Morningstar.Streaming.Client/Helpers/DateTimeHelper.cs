@@ -14,8 +14,8 @@ public static class DateTimeHelper
     }
     public static string ConvertFromEpoch(long nanosSinceEpoch)
     {
-        var epochInSeconds = nanosSinceEpoch / 1000000000;
-        var remainingNanoseconds = nanosSinceEpoch % 1000000000;
+        var epochInSeconds = nanosSinceEpoch / 1_000_000_000;
+        var remainingNanoseconds = nanosSinceEpoch % 1_000_000_000;
 
         var dateTime = EpochDateTimeOffset.AddSeconds(epochInSeconds);
 
