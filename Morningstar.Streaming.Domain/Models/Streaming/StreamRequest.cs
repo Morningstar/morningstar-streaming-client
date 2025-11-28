@@ -1,4 +1,4 @@
-namespace Morningstar.Streaming.Domain.Models.PolarisApi
+namespace Morningstar.Streaming.Domain.Models.Streaming
 {
     /// <summary>
     /// Wraps the /direct-web-services/v1/streaming/level-1 endpoint request.

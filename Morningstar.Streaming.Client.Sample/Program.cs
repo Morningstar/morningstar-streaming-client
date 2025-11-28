@@ -61,8 +61,8 @@ class Program
                 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
                 // Register all Morningstar Streaming Client services using the extension method
-                services.AddStreamingServices();                
-             
+                services.AddStreamingServices();
+
                 // If you want background counter logging, uncomment the following line:
                 services.AddStreamingHostedServices();
             });
@@ -78,31 +78,27 @@ class Program
 
         try
         {
-            // Example 1: Get current active subscriptions (should be empty initially)
-            logger.LogInformation("Checking for active subscriptions...");
-            var activeSubscriptions = canaryService.GetActiveSubscriptions();
-            logger.LogInformation("Found {Count} active subscription(s)", activeSubscriptions.Count);
-
-            // Example 2: Start a new Level 1 subscription
+            
+            // Example: Start a new Level 1 subscription
             // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
             // This is just a demonstration of the Streaming API Subscription functionality            
-            
+
             Console.WriteLine("--- Example: Starting a Level 1 Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
             Console.WriteLine("1. A valid access token from your authentication provider");
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
             Console.WriteLine("3. Investment identifiers to subscribe to");
-            
+
             // Run the following code to start a subscription:
 
             var secret = await oAuthProvider.GetOAuthSecretAsync(); // Ensure OAuth secret is set up
-            if(secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
+            if (secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
             {
                 Console.WriteLine("Invalid OAuth credentials. Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials.");
                 logger.LogWarning("Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials before running the subscription example.");
                 return;
             }
-            
+
             var subscriptionRequest = new StartSubscriptionRequest
             {
                 Stream = new StreamRequest
@@ -110,12 +106,12 @@ class Program
                     Investments = new List<Investments>
                     {
                         new Investments
-                        { 
+                        {
                             IdType = "PerformanceId",
                             Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
                         }
                     },
-                    EventTypes = new []
+                    EventTypes = new[]
                     {
                         EventTypes.AggregateSummary,
                         EventTypes.Auction,
@@ -140,21 +136,18 @@ class Program
 
             logger.LogInformation("Starting Level 1 subscription...");
             var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
-            
+
             if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 logger.LogInformation(
                     "Subscription started successfully! GUID: {Guid}, Started: {StartedAt}, Expires: {ExpiresAt}",
                     response.SubscriptionGuid,
                     response.StartedAt,
-                    response.ExpiresAt);
+                    response.ExpiresAt);                
 
-                //Monitor the subscription
-                await Task.Delay(TimeSpan.FromSeconds(120));
-                
-                activeSubscriptions = canaryService.GetActiveSubscriptions();
+                var activeSubscriptions = canaryService.GetActiveSubscriptions();
                 logger.LogInformation("Active subscriptions: {Count}", activeSubscriptions.Count);
-                
+
                 foreach (var sub in activeSubscriptions)
                 {
                     logger.LogInformation(
@@ -163,6 +156,9 @@ class Program
                         sub.StartedAt,
                         sub.WebSocketUrls.Count);
                 }
+
+                //Monitor the subscription
+                await Task.Delay(TimeSpan.FromSeconds(120));
 
                 //Stop the subscription
                 if (response.SubscriptionGuid.HasValue)

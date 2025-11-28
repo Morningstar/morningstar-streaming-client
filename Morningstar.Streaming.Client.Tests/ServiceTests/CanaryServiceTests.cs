@@ -240,9 +240,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 DurationSeconds = 60
             };
 
-            var expectedWebSocketUrls = new List<string> 
-            { 
-                "wss://test.com/stream1", 
+            var expectedWebSocketUrls = new List<string>
+            {
+                "wss://test.com/stream1",
                 "wss://test.com/stream2",
                 "wss://test.com/stream3"
             };
@@ -280,7 +280,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             // Assert
             mockWebSocketConsumerFactory.Verify(
-                x => x.Create(It.IsAny<string>(), false), 
+                x => x.Create(It.IsAny<string>(), false),
                 Times.Exactly(expectedWebSocketUrls.Count)
             );
         }
@@ -346,7 +346,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             // Assert
             mockWebSocketConsumerFactory.Verify(
-                x => x.Create(It.IsAny<string>(), true), 
+                x => x.Create(It.IsAny<string>(), true),
                 Times.Once
             );
         }
@@ -454,7 +454,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             result.Should().NotBeNull();
             result.Should().HaveCount(2);
-            
+
             result[0].Guid.Should().Be(subscription1.Guid);
             result[0].WebSocketUrls.Should().BeEquivalentTo(subscription1.WebSocketUrls);
             result[0].StartedAt.Should().Be(subscription1.StartedAt);
@@ -466,7 +466,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result[1].ExpiresAt.Should().BeNull();
 
             mockSubscriptionManager.Verify(x => x.Get(), Times.Once);
-        }        
+        }
 
         [Fact]
         public async Task StartLevel1SubscriptionAsync_AddsSubscriptionToManagerBeforeStartingConsumers()

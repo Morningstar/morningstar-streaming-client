@@ -1,6 +1,6 @@
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Channels;
 using Morningstar.Streaming.Client.Services.Counter;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets
@@ -14,7 +14,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         private readonly ICounterLogger counterLogger;
         private readonly ILogger eventsLogger;
-        private readonly CountingChannel<string> channel;
+        private readonly Channel<string> channel;
         private readonly Guid topicGuid;
 
         public WebSocketConsumer
@@ -32,7 +32,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.wsUrl = wsUrl;
             this.logToFile = logToFile;
             this.counterLogger = counterLogger;
-            channel = new();
+            
+            channel = Channel.CreateUnbounded<string>();
 
             Guid.TryParse(wsUrl.Substring(wsUrl.LastIndexOf('/') + 1), out Guid result);
             topicGuid = result;
@@ -50,7 +51,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     wsUrl,
                     async message =>
                     {
-                        if (!channel.TryWrite(message))
+                        if (!channel.Writer.TryWrite(message))
                         {
                             logger.LogError("Failed to enqueue message into channel. Message: {Message}", message);
                         }
@@ -82,7 +83,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
             finally
             {
-                channel.Chnl.Writer.Complete();
+                channel.Writer.Complete();
                 counterLogger.UnregisterSubscription(topicGuid);
             }
         }
@@ -91,7 +92,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         {
             try
             {
-                await foreach (var message in channel.Chnl.Reader.ReadAllAsync(cancellationToken))
+                await foreach (var message in channel.Reader.ReadAllAsync(cancellationToken))
                 {
                     if (logToFile) eventsLogger.LogInformation("{WebSocketMessage}", message);
                 }

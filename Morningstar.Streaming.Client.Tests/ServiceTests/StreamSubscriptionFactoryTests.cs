@@ -328,7 +328,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             // Assert
             capturedUrl.Should().Be("https://api.test.com/stream/level1");
-        }        
+        }
 
         [Fact]
         public async Task CreateAsync_PassesStreamRequestToApiClient()

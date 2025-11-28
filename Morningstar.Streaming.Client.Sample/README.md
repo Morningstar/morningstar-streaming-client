@@ -50,54 +50,130 @@ dotnet build
 dotnet run
 ```
 
-## Understanding the Code
+### 4. How these services interact with our Streaming Api
 
-### Main Components
+The Morningstar Streaming Client follows a clear workflow to establish and maintain real-time data streams:
 
-#### Program.cs
+#### Overview
 
-The entry point demonstrates:
+```
+┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐      ┌──────────────┐
+│   Your App  │ ───> │  CanaryService   │ ───> │ StreamingApi    │ ───> │  WebSocket   │
+│             │      │                  │      │     Client      │      │  Connection  │
+└─────────────┘      └──────────────────┘      └─────────────────┘      └──────────────┘
+```
 
-1. **Host Builder Setup**
-   ```csharp
-   Host.CreateDefaultBuilder(args)
-       .UseSerilog(...)
-       .ConfigureServices((context, services) => {
-          //Service Registration....
-       })
-   ```
+#### Step-by-Step Process
 
-2. **Service Registration**
-   ```csharp
-    // Register configuration sections
-    services.Configure<AppConfig>(context.Configuration.GetSection("AppConfig"));
-    services.Configure<EndpointConfig>(context.Configuration.GetSection("EndpointConfig"));
+**1. Create Subscription Request**
+```csharp
+var subscriptionRequest = new StartSubscriptionRequest
+{
+    Stream = new StreamRequest
+    {
+        Investments = [...],  // Securities to track
+        EventTypes = [...]    // Event types to receive
+    },
+    DurationSeconds = 300
+};
+```
 
-    // Register OAuth provider for your authentication
-    services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
+**2. CanaryService Creates the Stream**
+- `ICanaryService.StartLevel1SubscriptionAsync()` is called
+- Service validates the request and authenticates using your OAuth token
+- Makes HTTP POST to the Streaming API endpoint to register the subscription
+- Receives a `StreamResponse` containing the WebSocket URL and subscription ID
 
-    // Register all Morningstar Streaming Client services using the extension method
-    services.AddStreamingServices();                
-  
-    // If you want background counter logging, uncomment the following line:
-    //services.AddStreamingHostedServices();
-   ```
+**3. StreamingApiClient Establishes WebSocket Connection**
+- `IStreamingApiClient` automatically connects to the provided WebSocket URL
+- Adds authorization headers using the `ITokenProvider`
+- Implements automatic retry logic (up to 3 attempts) with exponential backoff
+- Resets retry counter after each successful connection for long-running streams
 
-3. **Using the Canary Service**
-   ```csharp
-   var canaryService = services.GetRequiredService<ICanaryService>();
-   var response = await canaryService.StartLevel1SubscriptionAsync(request);
-   ```
+**4. Message Processing Loop**
+- Receives real-time market data events via WebSocket
+- Handles server heartbeat messages automatically (sends acknowledgments)
+- Monitors heartbeat timeout (15 seconds) - closes connection if server stops responding
+- Routes data messages to your custom message handler
+- Messages are logged to file if `LogMessages` is enabled in configuration
+
+**5. Subscription Management**
+- `CanaryService` tracks all active subscriptions
+- Provides methods to stop individual subscriptions or all at once
+- Gracefully closes WebSocket connections when stopped
+- Cleans up resources and cancels background tasks
+
+#### Key Services Explained
+
+| Service | Purpose |
+|---------|---------|
+| **ICanaryService** | High-level orchestration - creates subscriptions, manages lifecycle |
+| **IStreamingApiClient** | HTTP API communication - makes REST calls to create streams |
+| **WebSocket Client** | Real-time data connection - receives live market data |
+| **ITokenProvider** | Authentication - provides OAuth bearer tokens |
+| **Counter Service** | (Optional) Tracks and logs message statistics |
+
+#### Configuration Points
+
+- **AppConfig**: Base URLs, OAuth endpoints, logging preferences
+- **EndpointConfig**: Specific API endpoint paths
+- **IOAuthProvider**: Your authentication implementation
+- **CancellationToken**: Graceful shutdown control
+
+This architecture ensures reliable, long-running connections with automatic error recovery and proper resource management.
+
+#### OpenAPI Specification
+****Full API documentation**** available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
 
 ## Extending This Example
 
 ### Adding Your Own Logic
 
-To create a subscription with real data, uncomment the subscription code in `Program.cs` and provide:
+To create a subscription with real data, run the subscription code in `Program.cs` and provide:
 
-1. **Access Token**: extend or replace the ExampleOAuthProvider implementation
+1. **OAuth Credentials**: Update the `ExampleOAuthProvider` with your Morningstar API credentials or Implement your own OAuthProvider implementation
 2. **Investment Identifiers**: Specify the securities you want to track
 3. **Duration**: How long the subscription should run
+
+#### Configuring OAuth Authentication
+
+The sample includes an `ExampleOAuthProvider` that you can update with your Morningstar API credentials as a quick start test. 
+It is recommended to implement your own OAuthProvider implementation to retrieve your Morningstar API credentials from a secure key vault or secrets manager.
+The `ITokenProvider` service will use these credentials to automatically fetch and manage OAuth bearer tokens.
+
+**Update ExampleOAuthProvider.cs:**
+
+```csharp
+public class ExampleOAuthProvider : IOAuthProvider
+{
+    public Task<OAuthSecret> GetOAuthSecretAsync()
+    {
+        // TODO: Implement your custom logic to retrieve credentials from a secure store
+        // Examples: Azure Key Vault, AWS Secrets Manager, environment variables, etc.
+        
+        var secret = new OAuthSecret
+        {
+            UserName = "{YOUR_USERNAME}",  // Replace with your Morningstar API username
+            Password = "{YOUR_PASSWORD}"   // Replace with your Morningstar API password
+        };
+        return Task.FromResult(secret);
+    }
+}
+```
+
+**Best Practices:**
+- ✅ **Never hardcode credentials** in source code
+- ✅ **Use secure storage**: Azure Key Vault, AWS Secrets Manager, HashiCorp Vault, etc.
+- ✅ **Environment-specific configs**: Different credentials for dev/staging/production
+- ✅ The `ITokenProvider` service automatically handles token fetching and caching for you
+
+**How it works:**
+1. Your `IOAuthProvider` returns credentials via `GetOAuthSecretAsync()`
+2. `ITokenProvider` uses these credentials to call the Morningstar OAuth endpoint
+3. The resulting bearer token is cached and automatically refreshed as needed
+4. All API and WebSocket requests include the valid token in Authorization headers
+
+#### Creating Subscriptions
 
 Example:
 
@@ -151,7 +227,6 @@ The library automatically handles WebSocket connections. To process messages:
 
 1. Subscribe to the appropriate events
 2. Implement custom message handlers
-3. Use the `IWebSocketConsumer` interface for advanced scenarios
 
 ### Adding Background Processing
 
@@ -286,12 +361,12 @@ After understanding this example, you can:
 1. **Integrate into your own application** - Copy the service registration pattern
 2. **Customize the data processing** - Add your own WebSocket message handlers
 3. **Add business logic** - Build features on top of the subscription data
-4. **Create different application types** - Use in WPF, Blazor, or other .NET apps
 
 ## Additional Resources
 
-- See `Morningstar.Streaming.Client\README.md` for detailed API documentation
+- See `..\README.md` for detailed API documentation
 - Check the `Morningstar.Streaming.Domain` project for all available models and contracts
+- **OpenAPI Specification**: Full API documentation available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
 
 ## Support
 

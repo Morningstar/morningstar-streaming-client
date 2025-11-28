@@ -138,7 +138,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var decodedString = System.Text.Encoding.UTF8.GetString(decodedBytes);
             decodedString.Should().Be("my-client-id:my-client-secret");
         }
-        
+
 
         [Fact]
         public async Task CreateBearerTokenAsync_WhenApiHelperThrowsException_LogsErrorAndThrows()
@@ -170,7 +170,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             var exception = await act.Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("Unexpected error during calling OAuth.");
-            
+
             exception.And.InnerException.Should().BeOfType<HttpRequestException>()
                 .Which.Message.Should().Be("OAuth service unavailable");
 
@@ -243,7 +243,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             callOrder[0].Should().Be("OAuthProvider");
             callOrder[1].Should().Be("ApiHelper");
         }
-        
+
         [Fact]
         public async Task CreateBearerTokenAsync_WithSpecialCharactersInCredentials_EncodesCorrectly()
         {

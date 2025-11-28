@@ -15,7 +15,7 @@ public class ExampleOAuthProvider : IOAuthProvider
 
         //... implement your custom logic to retrieve credentials ...
 
-        // NB : Do NOT hardcode credentials in production code,
+        // NB : Avoid hardcoding credentials in production code,
         // This is just an example of the end result after retrieving credentials from a secret store.
         var secret = new OAuthSecret
         {

@@ -39,7 +39,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         {
             // Arrange
             var guid = Guid.NewGuid();
-            
+
             var subscription1 = new SubscriptionGroup
             {
                 Guid = guid,
@@ -260,7 +260,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 retrieved.Guid.Should().Be(subscription.Guid);
                 retrieved.WebSocketUrls.Should().BeEquivalentTo(subscription.WebSocketUrls);
             }
-        }        
+        }
 
         [Fact]
         public void Remove_FromMultipleSubscriptions_RemovesOnlySpecified()

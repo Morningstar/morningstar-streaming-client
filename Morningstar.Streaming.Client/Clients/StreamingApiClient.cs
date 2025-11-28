@@ -52,6 +52,13 @@ namespace Morningstar.Streaming.Client.Clients
             }
         }
 
+        /// <summary>
+        /// Subscribes to a WebSocket stream for real-time market data.
+        /// Automatically handles connection, reconnection (up to 3 attempts), heartbeat monitoring, and message processing.
+        /// </summary>
+        /// <param name="webSocketUrl">The WebSocket URL to connect to</param>
+        /// <param name="onMessageAsync">Callback function to process incoming messages</param>
+        /// <param name="cancellationToken">Cancellation token to stop the subscription</param>
         public async Task SubscribeAsync(
         string webSocketUrl,
         Func<string, Task> onMessageAsync,
@@ -82,7 +89,7 @@ namespace Morningstar.Streaming.Client.Clients
                     attempt = 0;
 
                     await StartReceiveLoopAsync(ws, onMessageAsync, cancellationToken);
-                    
+
                     // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
                 }

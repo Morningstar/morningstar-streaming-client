@@ -109,7 +109,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             result.ErrorCode.Should().Be("INVALID_REQUEST");
             result.Message.Should().Be("No investments provided");
         }
-       
+
 
         [Fact]
         public async Task CreateL1StreamAsync_WhenExceptionOccurs_LogsErrorAndThrows()
@@ -142,15 +142,15 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
-        }   
-        
+        }
+
         [Fact]
         public async Task SubscribeAsync_WithImmediateCancellation_CompletesWithoutException()
         {
             // Arrange
             var webSocketUrl = "wss://test.com/stream";
             var messageReceived = false;
-            
+
             Func<string, Task> onMessageAsync = async (message) =>
             {
                 messageReceived = true;
@@ -166,7 +166,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             // Assert
             messageReceived.Should().BeFalse();
         }
-        
+
         [Fact]
         public async Task SubscribeAsync_LogsConnectionAttempt_WhenConnecting()
         {
@@ -186,7 +186,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             {
                 // Expected - connection will fail or be cancelled
             }
-            
+
             // Assert
             mockLogger.Verify(
                 x => x.Log(
@@ -199,7 +199,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                 "should log connection attempt");
         }
 
-      
+
         [Fact]
         public async Task SubscribeAsync_WithFailedConnection_RetriesAndLogsWarning()
         {
@@ -211,7 +211,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             cts.CancelAfter(450); // Allow time for at least one retry attempt
 
             // Act
-            await streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, cts.Token);                           
+            await streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, cts.Token);
 
             // Assert
             mockLogger.Verify(
@@ -223,6 +223,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce(),
                "should log warning about failed connection and retry");
-        }  
+        }
     }
 }

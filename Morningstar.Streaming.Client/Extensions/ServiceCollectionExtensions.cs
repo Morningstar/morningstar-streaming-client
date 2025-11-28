@@ -31,19 +31,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICanaryService, CanaryService>();
         services.AddSingleton<ICounterLogger, CounterLogger>();
         services.AddSingleton<ITokenProvider, TokenProvider>();
-        
+
         // HTTP client and API client
         services.AddHttpClient<IApiHelper, ApiHelper>();
         services.AddSingleton<IStreamingApiClient, StreamingApiClient>();
-        
+
         // Subscription services
         services.AddSingleton<IStreamSubscriptionFactory, StreamSubscriptionFactory>();
         services.AddSingleton<ISubscriptionGroupManager, SubscriptionGroupManager>();
-        
+
         // WebSocket services
         services.AddSingleton<IWebSocketConsumerFactory, WebSocketConsumerFactory>();
         services.AddSingleton<IWebSocketLoggerFactory, WebSocketLoggerFactory>();
-        
+
         return services;
     }
 

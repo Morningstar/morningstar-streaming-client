@@ -15,14 +15,14 @@ namespace Morningstar.Streaming.Client.Services
         /// </summary>
         /// <returns>List of active subscription information</returns>
         List<SubscriptionGroupView> GetActiveSubscriptions();
-        
+
         /// <summary>
         /// Starts a new Level 1 market data subscription.
         /// </summary>
         /// <param name="req">The subscription request with investment identifiers</param>
         /// <returns>Subscription response with GUID and WebSocket information</returns>
         Task<StartSubscriptionResponse> StartLevel1SubscriptionAsync(StartSubscriptionRequest req);
-        
+
         /// <summary>
         /// Stops an active subscription by its GUID.
         /// </summary>
