@@ -52,9 +52,9 @@ dotnet run
 
 ### 4. How these services interact with our Streaming Api
 
-The Morningstar Streaming Client follows a clear workflow to establish and maintain real-time data streams:
+The Morningstar Streaming Client library provides a layered architecture that simplifies working with real-time market data streams.
 
-#### Overview
+#### Architecture Overview
 
 ```
 ┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐      ┌──────────────┐
@@ -63,67 +63,54 @@ The Morningstar Streaming Client follows a clear workflow to establish and maint
 └─────────────┘      └──────────────────┘      └─────────────────┘      └──────────────┘
 ```
 
-#### Step-by-Step Process
+#### Workflow
 
-**1. Create Subscription Request**
-```csharp
-var subscriptionRequest = new StartSubscriptionRequest
-{
-    Stream = new StreamRequest
-    {
-        Investments = [...],  // Securities to track
-        EventTypes = [...]    // Event types to receive
-    },
-    DurationSeconds = 300
-};
-```
+**1. Request a Subscription**
+- You define what data you want (securities, event types, duration)
+- Submit the request through the Canary service
 
-**2. CanaryService Creates the Stream**
-- `ICanaryService.StartLevel1SubscriptionAsync()` is called
-- Service validates the request and authenticates using your OAuth token
-- Makes HTTP POST to the Streaming API endpoint to register the subscription
-- Receives a `StreamResponse` containing the WebSocket URL and subscription ID
+**2. Stream Creation**
+- The service authenticates your request using OAuth credentials
+- Registers your subscription with the Streaming API
+- Receives connection details for real-time data delivery
 
-**3. StreamingApiClient Establishes WebSocket Connection**
-- `IStreamingApiClient` automatically connects to the provided WebSocket URL
-- Adds authorization headers using the `ITokenProvider`
-- Implements automatic retry logic (up to 3 attempts) with exponential backoff
-- Resets retry counter after each successful connection for long-running streams
+**3. Real-Time Data Delivery**
+- WebSocket connection is automatically established and maintained
+- Market data events flow continuously to your application
+- Connection health is monitored with automatic heartbeat handling
 
-**4. Message Processing Loop**
-- Receives real-time market data events via WebSocket
-- Handles server heartbeat messages automatically (sends acknowledgments)
-- Monitors heartbeat timeout (15 seconds) - closes connection if server stops responding
-- Routes data messages to your custom message handler
-- Messages are logged to file if `LogMessages` is enabled in configuration
+**4. Automatic Reliability**
+- Failed connections are retried automatically with exponential backoff
+- Successful reconnections reset retry counters for long-running streams
+- Graceful shutdown when you stop a subscription or on cancellation
 
-**5. Subscription Management**
-- `CanaryService` tracks all active subscriptions
-- Provides methods to stop individual subscriptions or all at once
-- Gracefully closes WebSocket connections when stopped
-- Cleans up resources and cancels background tasks
+**5. Subscription Lifecycle**
+- Track all active subscriptions
+- Stop individual or all subscriptions as needed
+- Automatic cleanup of resources and connections
 
-#### Key Services Explained
+#### Key Components
 
-| Service | Purpose |
+| Component | Responsibility |
 |---------|---------|
-| **ICanaryService** | High-level orchestration - creates subscriptions, manages lifecycle |
-| **IStreamingApiClient** | HTTP API communication - makes REST calls to create streams |
-| **WebSocket Client** | Real-time data connection - receives live market data |
-| **ITokenProvider** | Authentication - provides OAuth bearer tokens |
-| **Counter Service** | (Optional) Tracks and logs message statistics |
+| **Canary Service** | High-level API for managing subscription lifecycle |
+| **Streaming API Client** | Communicates with Morningstar API endpoints |
+| **WebSocket Connection** | Maintains persistent connection for real-time data |
+| **Token Provider** | Handles OAuth authentication and token management |
+| **OAuth Provider** | Supplies your API credentials securely |
 
-#### Configuration Points
+#### What the Library Handles for You
 
-- **AppConfig**: Base URLs, OAuth endpoints, logging preferences
-- **EndpointConfig**: Specific API endpoint paths
-- **IOAuthProvider**: Your authentication implementation
-- **CancellationToken**: Graceful shutdown control
+- ✅ **Authentication**: Automatic OAuth token fetching, caching, and refresh
+- ✅ **Connection Management**: Establishes and maintains WebSocket connections
+- ✅ **Reliability**: Automatic reconnection with configurable retry logic
+- ✅ **Health Monitoring**: Server heartbeat detection and timeout handling
+- ✅ **Resource Cleanup**: Proper disposal of connections and background tasks
 
-This architecture ensures reliable, long-running connections with automatic error recovery and proper resource management.
+You focus on defining what data you need and how to process it—the library handles the complexity of maintaining reliable, authenticated, real-time connections.
 
 #### OpenAPI Specification
-****Full API documentation**** available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
+**Full API documentation** available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
 
 ## Extending This Example
 
@@ -162,10 +149,7 @@ public class ExampleOAuthProvider : IOAuthProvider
 ```
 
 **Best Practices:**
-- ✅ **Never hardcode credentials** in source code
-- ✅ **Use secure storage**: Azure Key Vault, AWS Secrets Manager, HashiCorp Vault, etc.
-- ✅ **Environment-specific configs**: Different credentials for dev/staging/production
-- ✅ The `ITokenProvider` service automatically handles token fetching and caching for you
+- ✅ **Avoid hardcoding credentials** in source code
 
 **How it works:**
 1. Your `IOAuthProvider` returns credentials via `GetOAuthSecretAsync()`
