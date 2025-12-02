@@ -164,8 +164,17 @@ class Program
                 if (response.SubscriptionGuid.HasValue)
                 {
                     logger.LogInformation("Stopping subscription...");
-                    var stopped = await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
-                    logger.LogInformation("Subscription stopped: {Stopped}", stopped);
+                    var stopResult = await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
+                    
+                    if (stopResult.Success)
+                    {
+                        logger.LogInformation("Subscription stopped successfully: {Message}", stopResult.Message);
+                    }
+                    else
+                    {
+                        logger.LogError("Failed to stop subscription. Error: {ErrorCode}, Message: {Message}", 
+                            stopResult.ErrorCode, stopResult.Message);
+                    }
                 }
             }
             else

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain.Config;
+using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
 using System.Net;
@@ -67,10 +68,29 @@ namespace Morningstar.Streaming.Client.Services
 
             subscriptionManager.TryAdd(sub);
 
+            var consumerTasks = new List<Task>();
             foreach (var url in streamResult.WebSocketUrls)
             {
-                _ = Task.Run(() => ConsumeWebSocketStreamAsync(url, sub, logMessages, sub.CancellationTokenSource.Token));
+                var task = Task.Run(() => ConsumeWebSocketStreamAsync(url, sub, logMessages, sub.CancellationTokenSource.Token));
+                consumerTasks.Add(task);
             }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.WhenAll(consumerTasks);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "One or more WebSocket consumers failed for subscription {SubscriptionGuid}", sub.Guid);
+                }
+                finally
+                {
+                    subscriptionManager.Remove(sub.Guid);
+                    logger.LogInformation("Subscription {SubscriptionGuid} removed from manager after all consumers completed", sub.Guid);
+                }
+            });
 
             return new StartSubscriptionResponse
             {
@@ -81,13 +101,31 @@ namespace Morningstar.Streaming.Client.Services
             };
         }
 
-        public Task<bool> StopSubscriptionAsync(Guid guid)
+        public Task<StopSubscriptionResponse> StopSubscriptionAsync(Guid guid)
         {
-            var sub = subscriptionManager.Get(guid);
-            if (sub == null) return Task.FromResult(false);
-            sub.CancellationTokenSource.Cancel();
-            subscriptionManager.Remove(guid);
-            return Task.FromResult(true);
+            try
+            {
+                var sub = subscriptionManager.Get(guid);
+                sub.CancellationTokenSource.Cancel();
+                return Task.FromResult(new StopSubscriptionResponse
+                {
+                    Success = true,
+                    SubscriptionGuid = guid,
+                    Message = "Subscription stopped successfully"
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                logger.LogWarning(ex, "Attempted to stop non-existent subscription {SubscriptionGuid}", guid);
+                
+                return Task.FromResult(new StopSubscriptionResponse
+                {
+                    Success = false,
+                    SubscriptionGuid = guid,
+                    ErrorCode = ErrorCodes.SubscriptionNotFound,
+                    Message = $"Subscription with ID {guid} was not found or has already been removed"
+                });
+            }
         }
 
         public List<SubscriptionGroupView> GetActiveSubscriptions()
@@ -109,6 +147,7 @@ namespace Morningstar.Streaming.Client.Services
         {
             var consumer = factory.Create(wsUrl, logToFile);
             await consumer.StartConsumingAsync(token);
+            
         }
     }
 }

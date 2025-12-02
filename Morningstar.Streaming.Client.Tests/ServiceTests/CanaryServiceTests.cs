@@ -7,6 +7,7 @@ using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
+using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
 using System.Net;
@@ -352,7 +353,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StopSubscriptionAsync_WithExistingSubscription_CancelsAndRemovesSubscription()
+        public async Task StopSubscriptionAsync_WithExistingSubscription_CancelsSubscription()
         {
             // Arrange
             var subscriptionGuid = Guid.NewGuid();
@@ -371,36 +372,39 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.Get(subscriptionGuid))
                 .Returns(subscriptionGroup);
 
-            mockSubscriptionManager
-                .Setup(x => x.Remove(subscriptionGuid));
-
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
             // Assert
-            result.Should().BeTrue();
+            result.Should().NotBeNull();
+            result.Success.Should().BeTrue();
+            result.SubscriptionGuid.Should().Be(subscriptionGuid);
+            result.Message.Should().Be("Subscription stopped successfully");
+            result.ErrorCode.Should().BeNull();
             cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
-            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
-            mockSubscriptionManager.Verify(x => x.Remove(subscriptionGuid), Times.Once);
+            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);          
         }
 
         [Fact]
-        public async Task StopSubscriptionAsync_WithNonExistingSubscription_ReturnsFalse()
+        public async Task StopSubscriptionAsync_WithNonExistingSubscription_ReturnsErrorResponse()
         {
             // Arrange
             var subscriptionGuid = Guid.NewGuid();
 
             mockSubscriptionManager
                 .Setup(x => x.Get(subscriptionGuid))
-                .Returns((SubscriptionGroup)null!);
+                .Throws(new InvalidOperationException($"Subscription does not exist {subscriptionGuid}"));
 
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
             // Assert
-            result.Should().BeFalse();
+            result.Should().NotBeNull();
+            result.Success.Should().BeFalse();
+            result.SubscriptionGuid.Should().Be(subscriptionGuid);
+            result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
+            result.Message.Should().Contain("not found");
             mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
-            mockSubscriptionManager.Verify(x => x.Remove(It.IsAny<Guid>()), Times.Never);
         }
 
         [Fact]
