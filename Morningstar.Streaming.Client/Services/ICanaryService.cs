@@ -27,7 +27,7 @@ namespace Morningstar.Streaming.Client.Services
         /// Stops an active subscription by its GUID.
         /// </summary>
         /// <param name="guid">The unique identifier of the subscription to stop</param>
-        /// <returns>True if successfully stopped, false if subscription not found</returns>
-        Task<bool> StopSubscriptionAsync(Guid guid);
+        /// <returns>Response indicating success or failure with details</returns>
+        Task<StopSubscriptionResponse> StopSubscriptionAsync(Guid guid);
     }
 }
