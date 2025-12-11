@@ -5,36 +5,35 @@ using System.Collections.Concurrent;
 using Morningstar.Streaming.Domain.Config;
 using Microsoft.Extensions.Options;
 
-namespace Morningstar.Streaming.Client.Services.WebSockets
+namespace Morningstar.Streaming.Client.Services.WebSockets;
+
+public class WebSocketLoggerFactory : IWebSocketLoggerFactory
 {
-    public class WebSocketLoggerFactory : IWebSocketLoggerFactory
+    private readonly AppConfig appConfig;
+    private readonly ConcurrentDictionary<Guid, ILogger> LoggerCache = new();
+
+    public WebSocketLoggerFactory(IOptions<AppConfig> appConfig)
     {
-        private readonly AppConfig appConfig;
-        private readonly ConcurrentDictionary<Guid, ILogger> LoggerCache = new();
+        this.appConfig = appConfig.Value;
+    }
 
-        public WebSocketLoggerFactory(IOptions<AppConfig> appConfig)
+    public ILogger GetLogger(Guid topicGuid)
+    {
+        return LoggerCache.GetOrAdd(topicGuid, guid =>
         {
-            this.appConfig = appConfig.Value;
-        }
+            var serilogLogger = new LoggerConfiguration()
+                .WriteTo.File
+                (
+                    $"{appConfig.LogMessagesPath}/ws-subscription-{guid}.txt",
+                    rollingInterval: RollingInterval.Day,
+                    fileSizeLimitBytes: 100_000_000,
+                    rollOnFileSizeLimit: true,
+                    retainedFileCountLimit: 100,
+                    flushToDiskInterval: TimeSpan.FromSeconds(2)
+                )
+                .CreateLogger();
 
-        public ILogger GetLogger(Guid topicGuid)
-        {
-            return LoggerCache.GetOrAdd(topicGuid, guid =>
-            {
-                var serilogLogger = new LoggerConfiguration()
-                    .WriteTo.File
-                    (
-                        $"{appConfig.LogMessagesPath}/ws-subscription-{guid}.txt",
-                        rollingInterval: RollingInterval.Day,
-                        fileSizeLimitBytes: 100_000_000,
-                        rollOnFileSizeLimit: true,
-                        retainedFileCountLimit: 100,
-                        flushToDiskInterval: TimeSpan.FromSeconds(2)
-                    )
-                    .CreateLogger();
-
-                return new SerilogLoggerFactory(serilogLogger).CreateLogger("WebSocketSubscription");
-            });
-        }
+            return new SerilogLoggerFactory(serilogLogger).CreateLogger("WebSocketSubscription");
+        });
     }
 }
