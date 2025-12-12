@@ -1,7 +1,6 @@
 using Morningstar.Streaming.Client.Services.Telemetry;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics.Metrics;
 
 namespace Morningstar.Streaming.Client.Sample.Services.Telemetry;
 
@@ -9,8 +8,6 @@ public class DisconnectionCounterLogger : IObservableMetric<IMetric>, IHostedSer
 {
     private AtomicCounter disconnectionCounter = new();
     private Timer? timer;
-    private static readonly Meter Meter = new("Morningstar.Streaming.Client.Sample.DisconnectionCounterLogger");
-    private readonly Counter<long> globalCounterMetric = Meter.CreateCounter<long>("diconnection_counter_total");
     private readonly ILogger<DisconnectionCounterLogger> logger;
 
     public DisconnectionCounterLogger(ILogger<DisconnectionCounterLogger> logger)
@@ -42,7 +39,6 @@ public class DisconnectionCounterLogger : IObservableMetric<IMetric>, IHostedSer
 
             if (count > 0)
             {
-                globalCounterMetric.Add(count);
                 logger.LogInformation("[Counter] Total Disconnections: {Count}", count);
             }
         }
