@@ -382,7 +382,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.Message.Should().Be("Subscription stopped successfully");
             result.ErrorCode.Should().BeNull();
             cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
-            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);          
+            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
         }
 
         [Fact]

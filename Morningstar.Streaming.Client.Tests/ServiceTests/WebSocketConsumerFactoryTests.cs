@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Services.Counter;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
@@ -13,6 +14,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<ICounterLogger> mockCounterLogger;
         private readonly Mock<IWebSocketLoggerFactory> mockWsLoggerFactory;
         private readonly Mock<IStreamingApiClient> mockClient;
+        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly WebSocketConsumerFactory webSocketConsumerFactory;
 
         public WebSocketConsumerFactoryTests()
@@ -22,6 +24,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockCounterLogger = new Mock<ICounterLogger>();
             mockWsLoggerFactory = new Mock<IWebSocketLoggerFactory>();
             mockClient = new Mock<IStreamingApiClient>();
+            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup default WebSocketLoggerFactory behavior
             var mockEventsLogger = new Mock<ILogger>();
@@ -34,7 +37,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockLogger.Object,
                 mockCounterLogger.Object,
                 mockWsLoggerFactory.Object,
-                mockClient.Object
+                mockClient.Object,
+                mockObservableMetric.Object
             );
         }
 

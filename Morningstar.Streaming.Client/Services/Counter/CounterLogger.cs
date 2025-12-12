@@ -1,15 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using System.Collections.Concurrent;
 
 namespace Morningstar.Streaming.Client.Services.Counter;
-
-public interface ICounterLogger
-{
-    void RegisterSubscription(Guid subscriptionId);
-    void UnregisterSubscription(Guid subscriptionId);
-    void Increment(Guid subscriptionId);
-}
 
 public class CounterLogger : ICounterLogger, IHostedService, IDisposable
 {
@@ -81,9 +75,3 @@ public class CounterLogger : ICounterLogger, IHostedService, IDisposable
 
     public void Dispose() => timer?.Dispose();
 }
-
-public class AtomicLong
-{
-    public long Value;
-}
-

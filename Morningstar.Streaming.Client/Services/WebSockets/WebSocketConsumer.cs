@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Services.Counter;
+using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets
 {
@@ -13,6 +14,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly bool logToFile;
 
         private readonly ICounterLogger counterLogger;
+        private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly ILogger eventsLogger;
         private readonly Channel<string> channel;
         private readonly Guid topicGuid;
@@ -23,6 +25,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             IWebSocketLoggerFactory wsLoggerFactory,
             ILogger<WebSocketConsumer> logger,
             IStreamingApiClient client,
+            IObservableMetric<IMetric>? observableMetric,
             string wsUrl,
             bool logToFile
         )
@@ -32,7 +35,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.wsUrl = wsUrl;
             this.logToFile = logToFile;
             this.counterLogger = counterLogger;
-            
+            this.observableMetric = observableMetric;
+
             channel = Channel.CreateUnbounded<string>();
 
             Guid.TryParse(wsUrl.Substring(wsUrl.LastIndexOf('/') + 1), out Guid result);
@@ -65,12 +69,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 // logTask will run until cancellation or channel completion
                 await Task.WhenAny(logTask, subTask);
 
-                // If we reach here due to cancellation, that's expected
-                // If subTask completed unexpectedly, we should know about it
-                if (subTask.IsCompleted && !subTask.IsFaulted && !cancellationToken.IsCancellationRequested)
-                {
-                    logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
-                }
+                _ = HandleSubscriptionTaskCompletion(subTask, cancellationToken);
             }
             catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
@@ -106,5 +105,41 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 logger.LogError(ex, "Exception in LogFromChannelAsync.");
             }
         }
+
+        private async Task RecordWebSocketDisconnectionMetric()
+        {
+            if (observableMetric == null)
+            {
+                return;
+            }
+
+            var metric = new AtomicLong { Value = 1 };
+            _ = observableMetric.RecordMetric("WebSocketDisconnections", metric, new Dictionary<string, string>
+                {
+                    { "TopicGuid", topicGuid.ToString() },
+                    { "WebSocketUrl", wsUrl }
+                });
+        }
+        private async Task HandleSubscriptionTaskCompletion(Task subTask, CancellationToken cancellationToken)
+        {
+            // If subscription task faults, record disconnection metric
+            if (IsUnexpectedDisconnection(subTask, cancellationToken))
+            {
+                await RecordWebSocketDisconnectionMetric();
+            }
+
+            // If we reach here due to cancellation, that's expected
+            // If subTask completed unexpectedly, we should know about it
+            if (IsUnexpectedCompletion(subTask, cancellationToken))
+            {
+                logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
+            }
+        }
+
+        private bool IsUnexpectedDisconnection(Task subTask, CancellationToken cancellationToken)
+            => subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
+
+        private bool IsUnexpectedCompletion(Task subTask, CancellationToken cancellationToken)
+            => subTask.IsCompleted && !subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
     }
 }
