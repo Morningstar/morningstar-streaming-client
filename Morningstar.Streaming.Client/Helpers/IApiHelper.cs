@@ -1,6 +1,7 @@
-namespace Morningstar.Streaming.Client.Helpers;
-
-public interface IApiHelper
+namespace Morningstar.Streaming.Client.Helpers
 {
-    Task<T> ProcessRequestAsync<T>(string requestUri, HttpMethod method, List<KeyValuePair<string, string>>? headers, object? model);
+    public interface IApiHelper
+    {
+        Task<T> ProcessRequestAsync<T>(string requestUri, HttpMethod method, List<KeyValuePair<string, string>>? headers, object? model);
+    }
 }

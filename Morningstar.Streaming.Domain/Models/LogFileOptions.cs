@@ -1,8 +1,9 @@
-namespace Morningstar.Streaming.Domain.Models;
-
-public class LogFileOptions
+namespace Morningstar.Streaming.Domain.Models
 {
-    public bool EnableFileLogging { get; set; }
-    public string RollingFilePath { get; set; }
-    public long FileSizeLimitBytes { get; set; }
+    public class LogFileOptions
+    {
+        public bool EnableFileLogging { get; set; }
+        public string RollingFilePath { get; set; }
+        public long FileSizeLimitBytes { get; set; }
+    }
 }

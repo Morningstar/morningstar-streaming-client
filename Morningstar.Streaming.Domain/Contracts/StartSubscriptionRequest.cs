@@ -1,10 +1,11 @@
 using System.Runtime.Serialization;
 
-namespace Morningstar.Streaming.Domain.Contracts;
-
-[DataContract]
-public class StartSubscriptionRequest : SubscriptionBaseRequest
+namespace Morningstar.Streaming.Domain.Contracts
 {
-    [DataMember]
-    public StreamRequest Stream { get; set; }
+    [DataContract]
+    public class StartSubscriptionRequest : SubscriptionBaseRequest
+    {
+        [DataMember]
+        public StreamRequest Stream { get; set; }
+    }
 }

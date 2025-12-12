@@ -1,13 +1,14 @@
-namespace Morningstar.Streaming.Client.Services.WebSockets;
-
-/// <summary>
-/// Interface for consuming WebSocket messages from the Morningstar Streaming API.
-/// </summary>
-public interface IWebSocketConsumer
+namespace Morningstar.Streaming.Client.Services.WebSockets
 {
     /// <summary>
-    /// Starts consuming messages from the WebSocket connection.
+    /// Interface for consuming WebSocket messages from the Morningstar Streaming API.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token to stop consuming messages</param>
-    Task StartConsumingAsync(CancellationToken cancellationToken = default);
+    public interface IWebSocketConsumer
+    {
+        /// <summary>
+        /// Starts consuming messages from the WebSocket connection.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token to stop consuming messages</param>
+        Task StartConsumingAsync(CancellationToken cancellationToken = default);
+    }
 }

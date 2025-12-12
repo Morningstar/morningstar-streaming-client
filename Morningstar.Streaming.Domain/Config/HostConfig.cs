@@ -1,6 +1,7 @@
-namespace Morningstar.Streaming.Domain.Config;
-
-public class HostConfig
+namespace Morningstar.Streaming.Domain.Config
 {
-    public string Url { get; set; }
+    public class HostConfig
+    {
+        public string Url { get; set; }
+    }
 }

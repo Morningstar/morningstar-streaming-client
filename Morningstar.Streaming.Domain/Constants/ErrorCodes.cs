@@ -1,6 +1,7 @@
-namespace Morningstar.Streaming.Domain.Constants;
-
-public static class ErrorCodes
+namespace Morningstar.Streaming.Domain.Constants
 {
-    public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
+    public static class ErrorCodes
+    {
+        public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
+    }
 }

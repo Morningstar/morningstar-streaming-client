@@ -1,7 +1,8 @@
-namespace Morningstar.Streaming.Domain.Contracts;
-
-public class Investments
+namespace Morningstar.Streaming.Domain.Contracts
 {
-    public string IdType { get; set; }
-    public List<string> Ids { get; set; }
+    public class Investments
+    {
+        public string IdType { get; set; }
+        public List<string> Ids { get; set; }
+    }
 }

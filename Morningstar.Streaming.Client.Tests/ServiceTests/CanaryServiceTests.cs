@@ -12,509 +12,510 @@ using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
 using System.Net;
 
-namespace Morningstar.Streaming.Client.Tests.ServiceTests;
-
-public class CanaryServiceTests
+namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
-    private readonly Mock<ISubscriptionGroupManager> mockSubscriptionManager;
-    private readonly Mock<IStreamSubscriptionFactory> mockStreamSubscriptionFactory;
-    private readonly Mock<IWebSocketConsumerFactory> mockWebSocketConsumerFactory;
-    private readonly Mock<ILogger<CanaryService>> mockLogger;
-    private readonly Mock<IOptions<AppConfig>> mockAppConfig;
-    private readonly CanaryService canaryService;
-
-    public CanaryServiceTests()
+    public class CanaryServiceTests
     {
-        // Arrange - Initialize mocks
-        mockSubscriptionManager = new Mock<ISubscriptionGroupManager>();
-        mockStreamSubscriptionFactory = new Mock<IStreamSubscriptionFactory>();
-        mockWebSocketConsumerFactory = new Mock<IWebSocketConsumerFactory>();
-        mockLogger = new Mock<ILogger<CanaryService>>();
-        mockAppConfig = new Mock<IOptions<AppConfig>>();
+        private readonly Mock<ISubscriptionGroupManager> mockSubscriptionManager;
+        private readonly Mock<IStreamSubscriptionFactory> mockStreamSubscriptionFactory;
+        private readonly Mock<IWebSocketConsumerFactory> mockWebSocketConsumerFactory;
+        private readonly Mock<ILogger<CanaryService>> mockLogger;
+        private readonly Mock<IOptions<AppConfig>> mockAppConfig;
+        private readonly CanaryService canaryService;
 
-        // Setup AppConfig with default values
-        mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
+        public CanaryServiceTests()
         {
-            LogMessages = false,
-            StreamingApiBaseAddress = "https://api.test.com",
-            OAuthAddress = "https://oauth.test.com",
-            ConnectionStringTtl = 300,
-            LogMessagesPath = "logs"
-        });
+            // Arrange - Initialize mocks
+            mockSubscriptionManager = new Mock<ISubscriptionGroupManager>();
+            mockStreamSubscriptionFactory = new Mock<IStreamSubscriptionFactory>();
+            mockWebSocketConsumerFactory = new Mock<IWebSocketConsumerFactory>();
+            mockLogger = new Mock<ILogger<CanaryService>>();
+            mockAppConfig = new Mock<IOptions<AppConfig>>();
 
-        // System Under Test
-        canaryService = new CanaryService(
-            mockSubscriptionManager.Object,
-            mockStreamSubscriptionFactory.Object,
-            mockWebSocketConsumerFactory.Object,
-            mockLogger.Object,
-            mockAppConfig.Object
-        );
-    }
+            // Setup AppConfig with default values
+            mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
+            {
+                LogMessages = false,
+                StreamingApiBaseAddress = "https://api.test.com",
+                OAuthAddress = "https://oauth.test.com",
+                ConnectionStringTtl = 300,
+                LogMessagesPath = "logs"
+            });
 
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_WithSuccessfulResponse_ReturnsStartSubscriptionResponse()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
+            // System Under Test
+            canaryService = new CanaryService(
+                mockSubscriptionManager.Object,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object
+            );
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithSuccessfulResponse_ReturnsStartSubscriptionResponse()
         {
-            DurationSeconds = 60
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
 
-        var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1", "wss://test.com/stream2" };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1", "wss://test.com/stream2" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
 
-        var streamResult = new StreamSubscriptionResult
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
+
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.SubscriptionGuid.Should().NotBeEmpty();
+            result.StartedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+            result.ExpiresAt.Should().NotBeNull();
+            result.ExpiresAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddSeconds(60), TimeSpan.FromSeconds(5));
+            result.ApiResponse.Should().NotBeNull();
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
+            mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithPartialContentResponse_ReturnsStartSubscriptionResponse()
         {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 120
+            };
 
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
 
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Returns(true);
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.PartialContent },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
 
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
 
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
 
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
 
-        // Assert
-        result.Should().NotBeNull();
-        result.SubscriptionGuid.Should().NotBeEmpty();
-        result.StartedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-        result.ExpiresAt.Should().NotBeNull();
-        result.ExpiresAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddSeconds(60), TimeSpan.FromSeconds(5));
-        result.ApiResponse.Should().NotBeNull();
-        result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
 
-        mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
-        mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Once);
-    }
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_WithPartialContentResponse_ReturnsStartSubscriptionResponse()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
+            // Assert
+            result.Should().NotBeNull();
+            result.SubscriptionGuid.Should().NotBeEmpty();
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.PartialContent);
+            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
+            mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithBadRequestResponse_ReturnsResponseWithoutCreatingSubscription()
         {
-            DurationSeconds = 120
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
 
-        var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.BadRequest },
+                WebSocketUrls = new List<string>(),
+                CancellationTokenSource = new CancellationTokenSource()
+            };
 
-        var streamResult = new StreamSubscriptionResult
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
+
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.SubscriptionGuid.Should().BeNull();
+            result.StartedAt.Should().BeNull();
+            result.ExpiresAt.Should().BeNull();
+            result.ApiResponse.Should().NotBeNull();
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
+            mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithNoDuration_CreatesSubscriptionWithoutExpiryDate()
         {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.PartialContent },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = null
+            };
 
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
 
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Returns(true);
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
 
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
 
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
 
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
 
-        // Assert
-        result.Should().NotBeNull();
-        result.SubscriptionGuid.Should().NotBeEmpty();
-        result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.PartialContent);
-        mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
-        mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Once);
-    }
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
 
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_WithBadRequestResponse_ReturnsResponseWithoutCreatingSubscription()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.SubscriptionGuid.Should().NotBeEmpty();
+            result.ExpiresAt.Should().BeNull();
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_CreatesWebSocketConsumersForAllUrls()
         {
-            DurationSeconds = 60
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
 
-        var streamResult = new StreamSubscriptionResult
+            var expectedWebSocketUrls = new List<string>
+            {
+                "wss://test.com/stream1",
+                "wss://test.com/stream2",
+                "wss://test.com/stream3"
+            };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
+
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
+
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
+
+            // Allow some time for background tasks to start
+            await Task.Delay(100);
+
+            // Assert
+            mockWebSocketConsumerFactory.Verify(
+                x => x.Create(It.IsAny<string>(), false),
+                Times.Exactly(expectedWebSocketUrls.Count)
+            );
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithLogMessagesEnabled_CreatesConsumersWithLoggingEnabled()
         {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.BadRequest },
-            WebSocketUrls = new List<string>(),
-            CancellationTokenSource = new CancellationTokenSource()
-        };
+            // Arrange
+            mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
+            {
+                LogMessages = true,
+                StreamingApiBaseAddress = "https://api.test.com",
+                OAuthAddress = "https://oauth.test.com",
+                ConnectionStringTtl = 300,
+                LogMessagesPath = "logs"
+            });
 
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
+            var sutWithLogging = new CanaryService(
+                mockSubscriptionManager.Object,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object
+            );
 
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
 
-        // Assert
-        result.Should().NotBeNull();
-        result.SubscriptionGuid.Should().BeNull();
-        result.StartedAt.Should().BeNull();
-        result.ExpiresAt.Should().BeNull();
-        result.ApiResponse.Should().NotBeNull();
-        result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
 
-        mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(request), Times.Once);
-        mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Never);
-    }
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
 
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_WithNoDuration_CreatesSubscriptionWithoutExpiryDate()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
+
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            var result = await sutWithLogging.StartLevel1SubscriptionAsync(request);
+
+            // Allow some time for background tasks to start
+            await Task.Delay(100);
+
+            // Assert
+            mockWebSocketConsumerFactory.Verify(
+                x => x.Create(It.IsAny<string>(), true),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_WithExistingSubscription_CancelsSubscription()
         {
-            DurationSeconds = null
-        };
+            // Arrange
+            var subscriptionGuid = Guid.NewGuid();
+            var cancellationTokenSource = new CancellationTokenSource();
 
-        var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
+            var subscriptionGroup = new SubscriptionGroup
+            {
+                Guid = subscriptionGuid,
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(60),
+                CancellationTokenSource = cancellationTokenSource
+            };
 
-        var streamResult = new StreamSubscriptionResult
+            mockSubscriptionManager
+                .Setup(x => x.Get(subscriptionGuid))
+                .Returns(subscriptionGroup);
+
+            // Act
+            var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Success.Should().BeTrue();
+            result.SubscriptionGuid.Should().Be(subscriptionGuid);
+            result.Message.Should().Be("Subscription stopped successfully");
+            result.ErrorCode.Should().BeNull();
+            cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
+            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_WithNonExistingSubscription_ReturnsErrorResponse()
         {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
+            // Arrange
+            var subscriptionGuid = Guid.NewGuid();
 
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
+            mockSubscriptionManager
+                .Setup(x => x.Get(subscriptionGuid))
+                .Throws(new InvalidOperationException($"Subscription does not exist {subscriptionGuid}"));
 
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Returns(true);
+            // Act
+            var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            // Assert
+            result.Should().NotBeNull();
+            result.Success.Should().BeFalse();
+            result.SubscriptionGuid.Should().Be(subscriptionGuid);
+            result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
+            result.Message.Should().Contain("not found");
+            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+        }
 
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
-
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.SubscriptionGuid.Should().NotBeEmpty();
-        result.ExpiresAt.Should().BeNull();
-        result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_CreatesWebSocketConsumersForAllUrls()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
+        [Fact]
+        public void GetActiveSubscriptions_WithNoSubscriptions_ReturnsEmptyList()
         {
-            DurationSeconds = 60
-        };
+            // Arrange
+            mockSubscriptionManager
+                .Setup(x => x.Get())
+                .Returns(new List<SubscriptionGroup>());
 
-        var expectedWebSocketUrls = new List<string>
+            // Act
+            var result = canaryService.GetActiveSubscriptions();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeEmpty();
+            mockSubscriptionManager.Verify(x => x.Get(), Times.Once);
+        }
+
+        [Fact]
+        public void GetActiveSubscriptions_WithMultipleSubscriptions_ReturnsAllSubscriptions()
         {
-            "wss://test.com/stream1",
-            "wss://test.com/stream2",
-            "wss://test.com/stream3"
-        };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
+            // Arrange
+            var subscription1 = new SubscriptionGroup
+            {
+                Guid = Guid.NewGuid(),
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                StartedAt = DateTime.UtcNow.AddMinutes(-5),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(55),
+                CancellationTokenSource = new CancellationTokenSource()
+            };
 
-        var streamResult = new StreamSubscriptionResult
+            var subscription2 = new SubscriptionGroup
+            {
+                Guid = Guid.NewGuid(),
+                WebSocketUrls = new List<string> { "wss://test.com/stream2", "wss://test.com/stream3" },
+                StartedAt = DateTime.UtcNow.AddMinutes(-3),
+                ExpiresAt = null,
+                CancellationTokenSource = new CancellationTokenSource()
+            };
+
+            var subscriptions = new List<SubscriptionGroup> { subscription1, subscription2 };
+
+            mockSubscriptionManager
+                .Setup(x => x.Get())
+                .Returns(subscriptions);
+
+            // Act
+            var result = canaryService.GetActiveSubscriptions();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().HaveCount(2);
+
+            result[0].Guid.Should().Be(subscription1.Guid);
+            result[0].WebSocketUrls.Should().BeEquivalentTo(subscription1.WebSocketUrls);
+            result[0].StartedAt.Should().Be(subscription1.StartedAt);
+            result[0].ExpiresAt.Should().Be(subscription1.ExpiresAt);
+
+            result[1].Guid.Should().Be(subscription2.Guid);
+            result[1].WebSocketUrls.Should().BeEquivalentTo(subscription2.WebSocketUrls);
+            result[1].StartedAt.Should().Be(subscription2.StartedAt);
+            result[1].ExpiresAt.Should().BeNull();
+
+            mockSubscriptionManager.Verify(x => x.Get(), Times.Once);
+        }
+
+        [Fact]
+        public async Task StartLevel1SubscriptionAsync_AddsSubscriptionToManagerBeforeStartingConsumers()
         {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
 
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
 
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Returns(true);
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
 
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
 
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
+            var addCalled = false;
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Callback(() => addCalled = true)
+                .Returns(true);
 
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Callback(() => addCalled.Should().BeTrue("TryAdd should be called before starting consumers"))
+                .Returns(Task.CompletedTask);
 
-        // Allow some time for background tasks to start
-        await Task.Delay(100);
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Returns(mockConsumer.Object);
 
-        // Assert
-        mockWebSocketConsumerFactory.Verify(
-            x => x.Create(It.IsAny<string>(), false),
-            Times.Exactly(expectedWebSocketUrls.Count)
-        );
-    }
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_WithLogMessagesEnabled_CreatesConsumersWithLoggingEnabled()
-    {
-        // Arrange
-        mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
-        {
-            LogMessages = true,
-            StreamingApiBaseAddress = "https://api.test.com",
-            OAuthAddress = "https://oauth.test.com",
-            ConnectionStringTtl = 300,
-            LogMessagesPath = "logs"
-        });
-
-        var sutWithLogging = new CanaryService(
-            mockSubscriptionManager.Object,
-            mockStreamSubscriptionFactory.Object,
-            mockWebSocketConsumerFactory.Object,
-            mockLogger.Object,
-            mockAppConfig.Object
-        );
-
-        var request = new StartSubscriptionRequest
-        {
-            DurationSeconds = 60
-        };
-
-        var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
-
-        var streamResult = new StreamSubscriptionResult
-        {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
-
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
-
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Returns(true);
-
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
-
-        // Act
-        var result = await sutWithLogging.StartLevel1SubscriptionAsync(request);
-
-        // Allow some time for background tasks to start
-        await Task.Delay(100);
-
-        // Assert
-        mockWebSocketConsumerFactory.Verify(
-            x => x.Create(It.IsAny<string>(), true),
-            Times.Once
-        );
-    }
-
-    [Fact]
-    public async Task StopSubscriptionAsync_WithExistingSubscription_CancelsSubscription()
-    {
-        // Arrange
-        var subscriptionGuid = Guid.NewGuid();
-        var cancellationTokenSource = new CancellationTokenSource();
-
-        var subscriptionGroup = new SubscriptionGroup
-        {
-            Guid = subscriptionGuid,
-            WebSocketUrls = new List<string> { "wss://test.com/stream1" },
-            StartedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddSeconds(60),
-            CancellationTokenSource = cancellationTokenSource
-        };
-
-        mockSubscriptionManager
-            .Setup(x => x.Get(subscriptionGuid))
-            .Returns(subscriptionGroup);
-
-        // Act
-        var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Success.Should().BeTrue();
-        result.SubscriptionGuid.Should().Be(subscriptionGuid);
-        result.Message.Should().Be("Subscription stopped successfully");
-        result.ErrorCode.Should().BeNull();
-        cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
-        mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
-    }
-
-    [Fact]
-    public async Task StopSubscriptionAsync_WithNonExistingSubscription_ReturnsErrorResponse()
-    {
-        // Arrange
-        var subscriptionGuid = Guid.NewGuid();
-
-        mockSubscriptionManager
-            .Setup(x => x.Get(subscriptionGuid))
-            .Throws(new InvalidOperationException($"Subscription does not exist {subscriptionGuid}"));
-
-        // Act
-        var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Success.Should().BeFalse();
-        result.SubscriptionGuid.Should().Be(subscriptionGuid);
-        result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
-        result.Message.Should().Contain("not found");
-        mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
-    }
-
-    [Fact]
-    public void GetActiveSubscriptions_WithNoSubscriptions_ReturnsEmptyList()
-    {
-        // Arrange
-        mockSubscriptionManager
-            .Setup(x => x.Get())
-            .Returns(new List<SubscriptionGroup>());
-
-        // Act
-        var result = canaryService.GetActiveSubscriptions();
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Should().BeEmpty();
-        mockSubscriptionManager.Verify(x => x.Get(), Times.Once);
-    }
-
-    [Fact]
-    public void GetActiveSubscriptions_WithMultipleSubscriptions_ReturnsAllSubscriptions()
-    {
-        // Arrange
-        var subscription1 = new SubscriptionGroup
-        {
-            Guid = Guid.NewGuid(),
-            WebSocketUrls = new List<string> { "wss://test.com/stream1" },
-            StartedAt = DateTime.UtcNow.AddMinutes(-5),
-            ExpiresAt = DateTime.UtcNow.AddMinutes(55),
-            CancellationTokenSource = new CancellationTokenSource()
-        };
-
-        var subscription2 = new SubscriptionGroup
-        {
-            Guid = Guid.NewGuid(),
-            WebSocketUrls = new List<string> { "wss://test.com/stream2", "wss://test.com/stream3" },
-            StartedAt = DateTime.UtcNow.AddMinutes(-3),
-            ExpiresAt = null,
-            CancellationTokenSource = new CancellationTokenSource()
-        };
-
-        var subscriptions = new List<SubscriptionGroup> { subscription1, subscription2 };
-
-        mockSubscriptionManager
-            .Setup(x => x.Get())
-            .Returns(subscriptions);
-
-        // Act
-        var result = canaryService.GetActiveSubscriptions();
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Should().HaveCount(2);
-
-        result[0].Guid.Should().Be(subscription1.Guid);
-        result[0].WebSocketUrls.Should().BeEquivalentTo(subscription1.WebSocketUrls);
-        result[0].StartedAt.Should().Be(subscription1.StartedAt);
-        result[0].ExpiresAt.Should().Be(subscription1.ExpiresAt);
-
-        result[1].Guid.Should().Be(subscription2.Guid);
-        result[1].WebSocketUrls.Should().BeEquivalentTo(subscription2.WebSocketUrls);
-        result[1].StartedAt.Should().Be(subscription2.StartedAt);
-        result[1].ExpiresAt.Should().BeNull();
-
-        mockSubscriptionManager.Verify(x => x.Get(), Times.Once);
-    }
-
-    [Fact]
-    public async Task StartLevel1SubscriptionAsync_AddsSubscriptionToManagerBeforeStartingConsumers()
-    {
-        // Arrange
-        var request = new StartSubscriptionRequest
-        {
-            DurationSeconds = 60
-        };
-
-        var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1" };
-        var expectedCancellationTokenSource = new CancellationTokenSource();
-
-        var streamResult = new StreamSubscriptionResult
-        {
-            ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
-            WebSocketUrls = expectedWebSocketUrls,
-            CancellationTokenSource = expectedCancellationTokenSource
-        };
-
-        mockStreamSubscriptionFactory
-            .Setup(x => x.CreateAsync(request))
-            .ReturnsAsync(streamResult);
-
-        var addCalled = false;
-        mockSubscriptionManager
-            .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-            .Callback(() => addCalled = true)
-            .Returns(true);
-
-        var mockConsumer = new Mock<IWebSocketConsumer>();
-        mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-            .Callback(() => addCalled.Should().BeTrue("TryAdd should be called before starting consumers"))
-            .Returns(Task.CompletedTask);
-
-        mockWebSocketConsumerFactory
-            .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
-            .Returns(mockConsumer.Object);
-
-        // Act
-        var result = await canaryService.StartLevel1SubscriptionAsync(request);
-
-        // Assert
-        addCalled.Should().BeTrue();
+            // Assert
+            addCalled.Should().BeTrue();
+        }
     }
 }
