@@ -177,7 +177,7 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
             testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 23
-            testRunner.And("I get an unexpected disonnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+            testRunner.And("I get an unexpected disconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 24
         testRunner.Then("I am able to reconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -217,7 +217,7 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
             testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 32
-            testRunner.And("I get an expected disonnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+            testRunner.And("I get an expected disconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 33
         testRunner.Then("I am able to reconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -257,7 +257,7 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
             testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 41
-            testRunner.And("I get an unexpected disonnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+            testRunner.And("I get an unexpected disconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 42
         testRunner.Then("I am able to reconnect", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");

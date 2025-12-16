@@ -20,7 +20,7 @@ Feature: Morningstar Streaming Client
         Given I have a valid subscribe request
         When I create a subscription
             And messages are successfully being received
-            And I get an unexpected disonnect                   
+            And I get an unexpected disconnect                   
         Then I am able to reconnect 
         And messages are successfully being received
 
@@ -29,7 +29,7 @@ Feature: Morningstar Streaming Client
         Given I have a valid subscribe request
         When I create a subscription
             And messages are successfully being received
-            And I get an expected disonnect                   
+            And I get an expected disconnect                   
         Then I am able to reconnect 
         And messages are successfully being received
 
@@ -38,6 +38,6 @@ Feature: Morningstar Streaming Client
         Given I have a valid subscribe request
         When I create a subscription
             And messages are successfully being received
-            And I get an unexpected disonnect                   
+            And I get an unexpected disconnect                   
         Then I am able to reconnect 
         And messages are successfully being received from where I left off

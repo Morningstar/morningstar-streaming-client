@@ -158,7 +158,7 @@ public class StreamingStepDefinitions
         }
     }
 
-    [When(@"I get an unexpected disonnect")]
+    [When(@"I get an unexpected disconnect")]
     public void WhenIGetAnUnexpectedDisconnect()
     {
         // Simulate unexpected disconnect
@@ -170,7 +170,7 @@ public class StreamingStepDefinitions
             .ThrowsAsync(new Exception("Connection lost unexpectedly"));
     }
 
-    [When(@"I get an expected disonnect")]
+    [When(@"I get an expected disconnect")]
     public void WhenIGetAnExpectedDisconnect()
     {
         // Simulate controlled disconnect (e.g., stopping subscription)
