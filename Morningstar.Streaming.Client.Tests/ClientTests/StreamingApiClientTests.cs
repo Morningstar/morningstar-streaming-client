@@ -1,10 +1,14 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
+using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
+using Morningstar.Streaming.Domain.Config;
+using Morningstar.Streaming.Domain.Constants;
 using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ClientTests
@@ -12,16 +16,24 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
     public class StreamingApiClientTests
     {
         private readonly Mock<IApiHelper> mockApiHelper;
+        private readonly Mock<IOptions<AppConfig>> mockAppConfig;
         private readonly Mock<ITokenProvider> mockTokenProvider;
         private readonly Mock<ILogger<StreamingApiClient>> mockLogger;
+        private readonly Mock<IAvroBinaryDeserializer> mockAvroBinaryDeserializer;
         private readonly StreamingApiClient streamingApiClient;
 
         public StreamingApiClientTests()
         {
             // Arrange - Initialize mocks
             mockApiHelper = new Mock<IApiHelper>();
+            mockAppConfig = new Mock<IOptions<AppConfig>>();
+            mockAppConfig.Setup(a => a.Value).Returns(new AppConfig
+            {
+                StreamingFormat = StreamingFormat.Json
+            });
             mockTokenProvider = new Mock<ITokenProvider>();
             mockLogger = new Mock<ILogger<StreamingApiClient>>();
+            mockAvroBinaryDeserializer = new Mock<IAvroBinaryDeserializer>();
 
             // Setup default token provider behavior
             mockTokenProvider
@@ -31,8 +43,10 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             // System Under Test
             streamingApiClient = new StreamingApiClient(
                 mockApiHelper.Object,
+                mockAppConfig.Object,
                 mockLogger.Object,
-                mockTokenProvider.Object
+                mockTokenProvider.Object,
+                mockAvroBinaryDeserializer.Object
             );
         }
 

@@ -10,6 +10,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly ICounterLogger counterLogger;
         private readonly IWebSocketLoggerFactory wsLoggerFactory;
         private readonly IStreamingApiClient client;
+        private readonly string streamingFormat;
 
         public WebSocketConsumerFactory
         (

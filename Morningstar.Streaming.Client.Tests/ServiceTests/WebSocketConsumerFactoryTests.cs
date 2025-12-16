@@ -1,9 +1,12 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.WebSockets;
+using Morningstar.Streaming.Domain.Config;
+using Morningstar.Streaming.Domain.Constants;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
