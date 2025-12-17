@@ -7,6 +7,7 @@ namespace Morningstar.Streaming.Domain
         public HttpStatusCode StatusCode { get; set; }
         public string? ErrorCode { get; set; }
         public object? Message { get; set; }
+        public string? Schema { get; set; }
         public Subscription? Subscriptions { get; set; }
         public MetaData? MetaData { get; set; }
     }

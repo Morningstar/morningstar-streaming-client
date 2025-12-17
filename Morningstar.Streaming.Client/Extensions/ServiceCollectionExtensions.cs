@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services;
+using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
 using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.TokenProvider;
@@ -31,6 +32,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICanaryService, CanaryService>();
         services.AddSingleton<ICounterLogger, CounterLogger>();
         services.AddSingleton<ITokenProvider, TokenProvider>();
+        services.AddSingleton<IAvroBinaryDeserializer, AvroBinaryDeserializer>();
 
         // HTTP client and API client
         services.AddHttpClient<IApiHelper, ApiHelper>();
