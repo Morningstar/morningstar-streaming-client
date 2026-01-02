@@ -33,7 +33,8 @@ class Program
 
         // Build the host with dependency injection and configuration
         var host = CreateHostBuilder(args).Build();
-
+        await host.StartAsync();
+        
         // Run the example
         await RunExampleAsync(host.Services);
 

@@ -207,7 +207,7 @@ namespace Morningstar.Streaming.Client.Clients
                         var payload = buffer.AsSpan(0, result.Count).ToArray();
                         var jsonMessage = await avroBinaryDeserializer.DeserializeAsync(payload);
                         // Processing the Admin Event Types as a Heartbeat due to Streaming Api sending these as Admin at the moment
-                        if (jsonMessage.Contains(EventTypes.Admin, StringComparison.OrdinalIgnoreCase))
+                        if (jsonMessage.Contains("\"EventTypes\":[\"Admin\"]", StringComparison.OrdinalIgnoreCase))
                         {
                             lastHeartbeat = DateTime.UtcNow;
                             await SendHeartbeatAckAsync(ws, cancellationToken);
