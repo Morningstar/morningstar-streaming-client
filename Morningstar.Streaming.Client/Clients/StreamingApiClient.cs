@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Helpers;
+using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
+using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
 using System.Net.WebSockets;
@@ -12,16 +15,25 @@ namespace Morningstar.Streaming.Client.Clients
     public class StreamingApiClient : IStreamingApiClient
     {
         private readonly IApiHelper apiHelper;
+        private readonly AppConfig appConfig;
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
+        private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
         private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(15);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
 
-        public StreamingApiClient(IApiHelper apiHelper, ILogger<StreamingApiClient> logger, ITokenProvider tokenProvider)
+        public StreamingApiClient(
+            IApiHelper apiHelper, 
+            IOptions<AppConfig> appConfig, 
+            ILogger<StreamingApiClient> logger, 
+            ITokenProvider tokenProvider,
+            IAvroBinaryDeserializer avroBinaryDeserializer)
         {
             this.apiHelper = apiHelper;
             this.tokenProvider = tokenProvider;
             this.logger = logger;
+            this.appConfig = appConfig.Value;
+            this.avroBinaryDeserializer = avroBinaryDeserializer;
         }
 
         /// <summary>
@@ -81,7 +93,8 @@ namespace Morningstar.Streaming.Client.Clients
 
                 try
                 {
-                    using var ws = await ConnectWebSocketAsync(webSocketUrl, cancellationToken);
+                    var wssUrl  = $"{webSocketUrl}/{appConfig.StreamingFormat}";
+                    using var ws = await ConnectWebSocketAsync(wssUrl, cancellationToken);
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
@@ -185,6 +198,27 @@ namespace Morningstar.Streaming.Client.Clients
                     }
 
                     await onMessageAsync(message);
+                }
+
+                if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    try
+                    {                     
+                        var payload = buffer.AsSpan(0, result.Count).ToArray();
+                        var jsonMessage = await avroBinaryDeserializer.DeserializeAsync(payload);
+                        // Processing the Admin Event Types as a Heartbeat due to Streaming Api sending these as Admin at the moment
+                        if (jsonMessage.Contains("\"EventTypes\":[\"Admin\"]", StringComparison.OrdinalIgnoreCase))
+                        {
+                            lastHeartbeat = DateTime.UtcNow;
+                            await SendHeartbeatAckAsync(ws, cancellationToken);
+                            continue;
+                        }                        
+                        await onMessageAsync(jsonMessage);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to process binary Avro message. Skipping.");
+                    }
                 }
             }
 
