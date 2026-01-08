@@ -3,8 +3,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Extensions;
 using Morningstar.Streaming.Client.Sample.Services.OAuthProvider;
+using Morningstar.Streaming.Client.Sample.Services.Telemetry;
 using Morningstar.Streaming.Client.Services;
 using Morningstar.Streaming.Client.Services.OAuthProvider;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
@@ -61,11 +63,14 @@ class Program
                 // Register example OAuth provider for your authentication
                 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
+                // if you want to to observe disconnections, uncomment the following line:
+                // services.AddSingleton<IObservableMetric<IMetric>, DisconnectionCounterLogger>();
+
                 // Register all Morningstar Streaming Client services using the extension method
                 services.AddStreamingServices();
 
                 // If you want background counter logging, uncomment the following line:
-                services.AddStreamingHostedServices();
+                // services.AddStreamingHostedServices();
             });
 
     /// <summary>
@@ -132,7 +137,8 @@ class Program
                         EventTypes.TradeCorrection
                     }
                 },
-                DurationSeconds = 300 // Run for 5 minutes
+                DurationSeconds = 120, // Run for 2 minutes
+                StreamingFormat = "avro" // Specify streaming format as json or avro
             };
 
             logger.LogInformation("Starting Level 1 subscription...");

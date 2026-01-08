@@ -136,10 +136,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
         }
 
-        private bool IsUnexpectedDisconnection(Task subTask, CancellationToken cancellationToken)
+        private static bool IsUnexpectedDisconnection(Task subTask, CancellationToken cancellationToken)
             => subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
 
-        private bool IsUnexpectedCompletion(Task subTask, CancellationToken cancellationToken)
+        private static bool IsUnexpectedCompletion(Task subTask, CancellationToken cancellationToken)
             => subTask.IsCompleted && !subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
     }
 }

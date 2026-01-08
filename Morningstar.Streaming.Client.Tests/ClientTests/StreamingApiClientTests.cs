@@ -16,7 +16,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
     public class StreamingApiClientTests
     {
         private readonly Mock<IApiHelper> mockApiHelper;
-        private readonly Mock<IOptions<AppConfig>> mockAppConfig;
         private readonly Mock<ITokenProvider> mockTokenProvider;
         private readonly Mock<ILogger<StreamingApiClient>> mockLogger;
         private readonly Mock<IAvroBinaryDeserializer> mockAvroBinaryDeserializer;
@@ -25,12 +24,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         public StreamingApiClientTests()
         {
             // Arrange - Initialize mocks
-            mockApiHelper = new Mock<IApiHelper>();
-            mockAppConfig = new Mock<IOptions<AppConfig>>();
-            mockAppConfig.Setup(a => a.Value).Returns(new AppConfig
-            {
-                StreamingFormat = StreamingFormat.Json
-            });
+            mockApiHelper = new Mock<IApiHelper>();            
             mockTokenProvider = new Mock<ITokenProvider>();
             mockLogger = new Mock<ILogger<StreamingApiClient>>();
             mockAvroBinaryDeserializer = new Mock<IAvroBinaryDeserializer>();
@@ -43,7 +37,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             // System Under Test
             streamingApiClient = new StreamingApiClient(
                 mockApiHelper.Object,
-                mockAppConfig.Object,
                 mockLogger.Object,
                 mockTokenProvider.Object,
                 mockAvroBinaryDeserializer.Object

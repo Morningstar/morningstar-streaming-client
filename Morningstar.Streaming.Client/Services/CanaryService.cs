@@ -71,7 +71,8 @@ namespace Morningstar.Streaming.Client.Services
             var consumerTasks = new List<Task>();
             foreach (var url in streamResult.WebSocketUrls)
             {
-                var task = Task.Run(() => ConsumeWebSocketStreamAsync(url, sub, logMessages, sub.CancellationTokenSource.Token));
+                var wsUrl = $"{url}/{req.StreamingFormat}";
+                var task = Task.Run(() => ConsumeWebSocketStreamAsync(wsUrl, sub, logMessages, sub.CancellationTokenSource.Token));
                 consumerTasks.Add(task);
             }
 

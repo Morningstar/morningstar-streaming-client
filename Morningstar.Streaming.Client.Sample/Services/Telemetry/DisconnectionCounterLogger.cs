@@ -6,9 +6,10 @@ namespace Morningstar.Streaming.Client.Sample.Services.Telemetry;
 
 public class DisconnectionCounterLogger : IObservableMetric<IMetric>, IHostedService, IDisposable
 {
-    private AtomicCounter disconnectionCounter = new();
+    private readonly AtomicCounter disconnectionCounter = new();
     private Timer? timer;
     private readonly ILogger<DisconnectionCounterLogger> logger;
+    private bool disposed;
 
     public DisconnectionCounterLogger(ILogger<DisconnectionCounterLogger> logger)
     {
@@ -35,7 +36,6 @@ public class DisconnectionCounterLogger : IObservableMetric<IMetric>, IHostedSer
         try
         {
             var count = disconnectionCounter.ResetAndGet();
-            var now = DateTime.UtcNow;
 
             if (count > 0)
             {
@@ -54,5 +54,21 @@ public class DisconnectionCounterLogger : IObservableMetric<IMetric>, IHostedSer
         return Task.CompletedTask;
     }
 
-    public void Dispose() => timer?.Dispose();
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposed)
+        {
+            if (disposing)
+            {
+                timer?.Dispose();
+            }
+            disposed = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
 }

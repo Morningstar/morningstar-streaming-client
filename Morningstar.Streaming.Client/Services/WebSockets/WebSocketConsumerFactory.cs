@@ -11,7 +11,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly ICounterLogger counterLogger;
         private readonly IWebSocketLoggerFactory wsLoggerFactory;
         private readonly IStreamingApiClient client;
-        private readonly IObservableMetric<IMetric> observableMetric;
+        private readonly IObservableMetric<IMetric>? observableMetric;
 
         public WebSocketConsumerFactory
         (
@@ -19,7 +19,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             ICounterLogger counterLogger,
             IWebSocketLoggerFactory wsLoggerFactory,
             IStreamingApiClient client,
-            IObservableMetric<IMetric> observableMetric
+            IObservableMetric<IMetric>? observableMetric
         )
         {
             this.logger = logger;
@@ -27,6 +27,20 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.wsLoggerFactory = wsLoggerFactory;
             this.client = client;
             this.observableMetric = observableMetric;
+        }
+
+        public WebSocketConsumerFactory
+        (
+            ILogger<WebSocketConsumer> logger,
+            ICounterLogger counterLogger,
+            IWebSocketLoggerFactory wsLoggerFactory,
+            IStreamingApiClient client
+        )
+        {
+            this.logger = logger;
+            this.counterLogger = counterLogger;
+            this.wsLoggerFactory = wsLoggerFactory;
+            this.client = client;
         }
 
         public IWebSocketConsumer Create(string wsUrl, bool logToFile)

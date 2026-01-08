@@ -9,5 +9,8 @@ namespace Morningstar.Streaming.Domain.Contracts
         /// </summary>
         [DataMember]
         public int? DurationSeconds { get; set; }
+
+        [DataMember]
+        public string StreamingFormat { get; set; } = Constants.StreamingFormat.Json;
     }
 }
