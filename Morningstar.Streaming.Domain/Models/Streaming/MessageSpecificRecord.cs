@@ -52,29 +52,29 @@ namespace com.morningstar.rtd.data.polarisetl
         );
 
         private long? _InstrumentId;
-        private string _PerformanceId;
+        private string? _PerformanceId;
         private long? _SequenceNumber;
-        private string _ContextId;
-        private IList<EventType> _EventTypes;
-        private AggregateSummary _AggregateSummary;
-        private Auction _Auction;
-        private Close _Close;
-        private Financials _Financials;
-        private IndexTick _IndexTick;
-        private LastPrice _LastPrice;
-        private IList<MarketByPrice> _MarketByPrice;
-        private MidPrice _MidPrice;
-        private NAVPrice _NAVPrice;
-        private OHLPrice _OHLPrice;
-        private InstrumentPerformanceStatistics _InstrumentPerformanceStatistics;
-        private SettlementPrice _SettlementPrice;
-        private SpreadStatistics _SpreadStatistics;
-        private Status _Status;
-        private TopOfBook _TopOfBook;
-        private TradeCancellation _TradeCancellation;
-        private TradeCorrection _TradeCorrection;
-        private Trade _Trade;
-        private Admin _Admin;
+        private string? _ContextId;
+        private IList<EventType>? _EventTypes;
+        private AggregateSummary? _AggregateSummary;
+        private Auction? _Auction;
+        private Close? _Close;
+        private Financials? _Financials;
+        private IndexTick? _IndexTick;
+        private LastPrice? _LastPrice;
+        private IList<MarketByPrice>? _MarketByPrice;
+        private MidPrice? _MidPrice;
+        private NAVPrice? _NAVPrice;
+        private OHLPrice? _OHLPrice;
+        private InstrumentPerformanceStatistics? _InstrumentPerformanceStatistics;
+        private SettlementPrice? _SettlementPrice;
+        private SpreadStatistics? _SpreadStatistics;
+        private Status? _Status;
+        private TopOfBook? _TopOfBook;
+        private TradeCancellation? _TradeCancellation;
+        private TradeCorrection? _TradeCorrection;
+        private Trade? _Trade;
+        private Admin? _Admin;
 
         public virtual Schema Schema => _SCHEMA;
 
@@ -84,7 +84,7 @@ namespace com.morningstar.rtd.data.polarisetl
             set => _InstrumentId = value;
         }
 
-        public string PerformanceId
+        public string? PerformanceId
         {
             get => _PerformanceId;
             set => _PerformanceId = value;
@@ -96,133 +96,133 @@ namespace com.morningstar.rtd.data.polarisetl
             set => _SequenceNumber = value;
         }
 
-        public string ContextId
+        public string? ContextId
         {
             get => _ContextId;
             set => _ContextId = value;
         }
 
-        public IList<EventType> EventTypes
+        public IList<EventType>? EventTypes
         {
             get => _EventTypes;
             set => _EventTypes = value;
         }
 
-        public AggregateSummary AggregateSummary
+        public AggregateSummary? AggregateSummary
         {
             get => _AggregateSummary;
             set => _AggregateSummary = value;
         }
 
-        public Auction Auction
+        public Auction? Auction
         {
             get => _Auction;
             set => _Auction = value;
         }
 
-        public Close Close
+        public Close? Close
         {
             get => _Close;
             set => _Close = value;
         }
 
-        public Financials Financials
+        public Financials? Financials
         {
             get => _Financials;
             set => _Financials = value;
         }
 
-        public IndexTick IndexTick
+        public IndexTick? IndexTick
         {
             get => _IndexTick;
             set => _IndexTick = value;
         }
 
-        public LastPrice LastPrice
+        public LastPrice? LastPrice
         {
             get => _LastPrice;
             set => _LastPrice = value;
         }
 
-        public IList<MarketByPrice> MarketByPrice
+        public IList<MarketByPrice>? MarketByPrice
         {
             get => _MarketByPrice;
             set => _MarketByPrice = value;
         }
 
-        public MidPrice MidPrice
+        public MidPrice? MidPrice
         {
             get => _MidPrice;
             set => _MidPrice = value;
         }
 
-        public NAVPrice NAVPrice
+        public NAVPrice? NAVPrice
         {
             get => _NAVPrice;
             set => _NAVPrice = value;
         }
 
-        public OHLPrice OHLPrice
+        public OHLPrice? OHLPrice
         {
             get => _OHLPrice;
             set => _OHLPrice = value;
         }
 
-        public InstrumentPerformanceStatistics InstrumentPerformanceStatistics
+        public InstrumentPerformanceStatistics? InstrumentPerformanceStatistics
         {
             get => _InstrumentPerformanceStatistics;
             set => _InstrumentPerformanceStatistics = value;
         }
 
-        public SettlementPrice SettlementPrice
+        public SettlementPrice? SettlementPrice
         {
             get => _SettlementPrice;
             set => _SettlementPrice = value;
         }
 
-        public SpreadStatistics SpreadStatistics
+        public SpreadStatistics? SpreadStatistics
         {
             get => _SpreadStatistics;
             set => _SpreadStatistics = value;
         }
 
-        public Status Status
+        public Status? Status
         {
             get => _Status;
             set => _Status = value;
         }
 
-        public TopOfBook TopOfBook
+        public TopOfBook? TopOfBook
         {
             get => _TopOfBook;
             set => _TopOfBook = value;
         }
 
-        public TradeCancellation TradeCancellation
+        public TradeCancellation? TradeCancellation
         {
             get => _TradeCancellation;
             set => _TradeCancellation = value;
         }
 
-        public TradeCorrection TradeCorrection
+        public TradeCorrection? TradeCorrection
         {
             get => _TradeCorrection;
             set => _TradeCorrection = value;
         }
 
-        public Trade Trade
+        public Trade? Trade
         {
             get => _Trade;
             set => _Trade = value;
         }
 
-        public Admin Admin
+        public Admin? Admin
         {
             get => _Admin;
             set => _Admin = value;
         }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -364,7 +364,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public long? OpenInterestDateTime { get => _OpenInterestDateTime; set => _OpenInterestDateTime = value; }
         public double? Turnover { get => _Turnover; set => _Turnover = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -405,8 +405,8 @@ namespace com.morningstar.rtd.data.polarisetl
         private double? _IndicativeAuctionPrice;
         private int? _IndicativeAuctionSize;
         private long? _ImbalanceSize;
-        private string _ImbalanceSide;
-        private string _AuctionType;
+        private string? _ImbalanceSide;
+        private string? _AuctionType;
         private int? _AuctionDate;
 
         public virtual Schema Schema => _SCHEMA;
@@ -414,11 +414,11 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? IndicativeAuctionPrice { get => _IndicativeAuctionPrice; set => _IndicativeAuctionPrice = value; }
         public int? IndicativeAuctionSize { get => _IndicativeAuctionSize; set => _IndicativeAuctionSize = value; }
         public long? ImbalanceSize { get => _ImbalanceSize; set => _ImbalanceSize = value; }
-        public string ImbalanceSide { get => _ImbalanceSide; set => _ImbalanceSide = value; }
-        public string AuctionType { get => _AuctionType; set => _AuctionType = value; }
+        public string? ImbalanceSide { get => _ImbalanceSide; set => _ImbalanceSide = value; }
+        public string? AuctionType { get => _AuctionType; set => _AuctionType = value; }
         public int? AuctionDate { get => _AuctionDate; set => _AuctionDate = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -466,7 +466,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? UnadjustedPreviousClosePrice { get => _UnadjustedPreviousClosePrice; set => _UnadjustedPreviousClosePrice = value; }
         public double? VendorProvidedAdjustedPreviousClosePrice { get => _VendorProvidedAdjustedPreviousClosePrice; set => _VendorProvidedAdjustedPreviousClosePrice = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -502,7 +502,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public virtual Schema Schema => _SCHEMA;
         public double? PriceBookRatio { get => _PriceBookRatio; set => _PriceBookRatio = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -534,7 +534,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public long? PriceCalculationDateTime { get => _PriceCalculationDateTime; set => _PriceCalculationDateTime = value; }
         public long? PricePublicationTime { get => _PricePublicationTime; set => _PricePublicationTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -573,7 +573,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public int? Size { get => _Size; set => _Size = value; }
         public long? PricePublishDateTime { get => _PricePublishDateTime; set => _PricePublishDateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -604,7 +604,7 @@ namespace com.morningstar.rtd.data.polarisetl
         );
 
         private int? _RankLevel;
-        private string _Side;
+        private string? _Side;
         private double? _Price;
         private int? _Volume;
         private int? _NumberOfOrders;
@@ -613,13 +613,13 @@ namespace com.morningstar.rtd.data.polarisetl
         public virtual Schema Schema => _SCHEMA;
 
         public int? RankLevel { get => _RankLevel; set => _RankLevel = value; }
-        public string Side { get => _Side; set => _Side = value; }
+        public string? Side { get => _Side; set => _Side = value; }
         public double? Price { get => _Price; set => _Price = value; }
         public int? Volume { get => _Volume; set => _Volume = value; }
         public int? NumberOfOrders { get => _NumberOfOrders; set => _NumberOfOrders = value; }
         public long? Timestamp { get => _Timestamp; set => _Timestamp = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -668,7 +668,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? PriceClose { get => _PriceClose; set => _PriceClose = value; }
         public long? DateTime { get => _DateTime; set => _DateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -709,7 +709,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? ExchangeNAV { get => _ExchangeNAV; set => _ExchangeNAV = value; }
         public long? NAVDateTime { get => _NAVDateTime; set => _NAVDateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -752,7 +752,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? LowPrice { get => _LowPrice; set => _LowPrice = value; }
         public long? LowPriceDateTime { get => _LowPriceDateTime; set => _LowPriceDateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -808,7 +808,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? PostMarketNetChange { get => _PostMarketNetChange; set => _PostMarketNetChange = value; }
         public double? PostMarketPercentChange { get => _PostMarketPercentChange; set => _PostMarketPercentChange = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -853,7 +853,7 @@ namespace com.morningstar.rtd.data.polarisetl
         private int? _SettlementPriceType;
         private long? _SettlementPriceDateTime;
         private double? _PreviousSettlementPrice;
-        private string _SettlementPriceMethod;
+        private string? _SettlementPriceMethod;
 
         public virtual Schema Schema => _SCHEMA;
 
@@ -862,9 +862,9 @@ namespace com.morningstar.rtd.data.polarisetl
         public int? SettlementPriceType { get => _SettlementPriceType; set => _SettlementPriceType = value; }
         public long? SettlementPriceDateTime { get => _SettlementPriceDateTime; set => _SettlementPriceDateTime = value; }
         public double? PreviousSettlementPrice { get => _PreviousSettlementPrice; set => _PreviousSettlementPrice = value; }
-        public string SettlementPriceMethod { get => _SettlementPriceMethod; set => _SettlementPriceMethod = value; }
+        public string? SettlementPriceMethod { get => _SettlementPriceMethod; set => _SettlementPriceMethod = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -909,7 +909,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? DailyAverageSpreadPercentage { get => _DailyAverageSpreadPercentage; set => _DailyAverageSpreadPercentage = value; }
         public double? DailyAverageSpread { get => _DailyAverageSpread; set => _DailyAverageSpread = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -939,20 +939,20 @@ namespace com.morningstar.rtd.data.polarisetl
             "{\"type\":\"record\",\"name\":\"Status\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"InstrumentPhase\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"InstrumentPhaseDateTime\",\"default\":null,\"type\":[\"null\",\"long\"]},{\"name\":\"TradingStatus\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"ActiveInactiveFlag\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"TradingStatusDateTime\",\"default\":null,\"type\":[\"null\",\"long\"]}]}"
         );
 
-        private string _InstrumentPhase;
+        private string? _InstrumentPhase;
         private long? _InstrumentPhaseDateTime;
         private int? _TradingStatus;
-        private string _ActiveInactiveFlag;
+        private string? _ActiveInactiveFlag;
         private long? _TradingStatusDateTime;
 
         public virtual Schema Schema => _SCHEMA;
-        public string InstrumentPhase { get => _InstrumentPhase; set => _InstrumentPhase = value; }
+        public string? InstrumentPhase { get => _InstrumentPhase; set => _InstrumentPhase = value; }
         public long? InstrumentPhaseDateTime { get => _InstrumentPhaseDateTime; set => _InstrumentPhaseDateTime = value; }
         public int? TradingStatus { get => _TradingStatus; set => _TradingStatus = value; }
-        public string ActiveInactiveFlag { get => _ActiveInactiveFlag; set => _ActiveInactiveFlag = value; }
+        public string? ActiveInactiveFlag { get => _ActiveInactiveFlag; set => _ActiveInactiveFlag = value; }
         public long? TradingStatusDateTime { get => _TradingStatusDateTime; set => _TradingStatusDateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1014,7 +1014,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public double? BidPriceClose { get => _BidPriceClose; set => _BidPriceClose = value; }
         public double? AskPriceClose { get => _AskPriceClose; set => _AskPriceClose = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1062,14 +1062,14 @@ namespace com.morningstar.rtd.data.polarisetl
             "{\"type\":\"record\",\"name\":\"TradeCancellation\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"OriginalTradeID\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"DateTime\",\"default\":null,\"type\":[\"null\",\"long\"]}]}"
         );
 
-        private string _OriginalTradeID;
+        private string? _OriginalTradeID;
         private long? _DateTime;
 
         public virtual Schema Schema => _SCHEMA;
-        public string OriginalTradeID { get => _OriginalTradeID; set => _OriginalTradeID = value; }
+        public string? OriginalTradeID { get => _OriginalTradeID; set => _OriginalTradeID = value; }
         public long? DateTime { get => _DateTime; set => _DateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1099,19 +1099,19 @@ namespace com.morningstar.rtd.data.polarisetl
 
         private double? _CorrectedTradePrice;
         private int? _CorrectedTradeSize;
-        private string _OriginalTradeID;
+        private string? _OriginalTradeID;
         private long? _DateTime;
-        private string _CorrectedTradeConditions;
+        private string? _CorrectedTradeConditions;
 
         public virtual Schema Schema => _SCHEMA;
 
         public double? CorrectedTradePrice { get => _CorrectedTradePrice; set => _CorrectedTradePrice = value; }
         public int? CorrectedTradeSize { get => _CorrectedTradeSize; set => _CorrectedTradeSize = value; }
-        public string OriginalTradeID { get => _OriginalTradeID; set => _OriginalTradeID = value; }
+        public string? OriginalTradeID { get => _OriginalTradeID; set => _OriginalTradeID = value; }
         public long? DateTime { get => _DateTime; set => _DateTime = value; }
-        public string CorrectedTradeConditions { get => _CorrectedTradeConditions; set => _CorrectedTradeConditions = value; }
+        public string? CorrectedTradeConditions { get => _CorrectedTradeConditions; set => _CorrectedTradeConditions = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1146,19 +1146,19 @@ namespace com.morningstar.rtd.data.polarisetl
             "{\"type\":\"record\",\"name\":\"Trade\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"TradePostMarket\",\"default\":null,\"type\":[\"null\",{\"type\":\"record\",\"name\":\"TradePostMarket\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"Price\",\"default\":null,\"type\":[\"null\",\"double\"]},{\"name\":\"Size\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"CumulativeVolume\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"Count\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"DateTime\",\"default\":null,\"type\":[\"null\",\"long\"]}]}]},{\"name\":\"TradePreMarket\",\"default\":null,\"type\":[\"null\",{\"type\":\"record\",\"name\":\"TradePreMarket\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"Price\",\"default\":null,\"type\":[\"null\",\"double\"]},{\"name\":\"Size\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"CumulativeVolume\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"Count\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"DateTime\",\"default\":null,\"type\":[\"null\",\"long\"]}]}]},{\"name\":\"TradeRegulatory\",\"default\":null,\"type\":[\"null\",{\"type\":\"record\",\"name\":\"TradeRegulatory\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"MMTFlagTransactionCategory\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagMarketMechanism\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagTradingMode\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagDuplicativeTradeIndicator\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagPublicationMode\",\"default\":null,\"type\":[\"null\",\"string\"]}]}]},{\"name\":\"TradePrice\",\"default\":null,\"type\":[\"null\",{\"type\":\"record\",\"name\":\"TradePrice\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"Price\",\"default\":null,\"type\":[\"null\",\"double\"]},{\"name\":\"Size\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"ExecutionDateTime\",\"default\":null,\"type\":[\"null\",\"long\"]},{\"name\":\"Conditions\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"IdentificationCode\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"PublishDateTime\",\"default\":null,\"type\":[\"null\",\"long\"]},{\"name\":\"ExecutionVenue\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"ExecutionCurrency\",\"default\":null,\"type\":[\"null\",\"string\"]}]}]}]}"
         );
 
-        private TradePostMarket _TradePostMarket;
-        private TradePreMarket _TradePreMarket;
-        private TradeRegulatory _TradeRegulatory;
-        private TradePrice _TradePrice;
+        private TradePostMarket? _TradePostMarket;
+        private TradePreMarket? _TradePreMarket;
+        private TradeRegulatory? _TradeRegulatory;
+        private TradePrice? _TradePrice;
 
         public virtual Schema Schema => _SCHEMA;
 
-        public TradePostMarket TradePostMarket { get => _TradePostMarket; set => _TradePostMarket = value; }
-        public TradePreMarket TradePreMarket { get => _TradePreMarket; set => _TradePreMarket = value; }
-        public TradeRegulatory TradeRegulatory { get => _TradeRegulatory; set => _TradeRegulatory = value; }
-        public TradePrice TradePrice { get => _TradePrice; set => _TradePrice = value; }
+        public TradePostMarket? TradePostMarket { get => _TradePostMarket; set => _TradePostMarket = value; }
+        public TradePreMarket? TradePreMarket { get => _TradePreMarket; set => _TradePreMarket = value; }
+        public TradeRegulatory? TradeRegulatory { get => _TradeRegulatory; set => _TradeRegulatory = value; }
+        public TradePrice? TradePrice { get => _TradePrice; set => _TradePrice = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1203,7 +1203,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public int? Count { get => _Count; set => _Count = value; }
         public long? DateTime { get => _DateTime; set => _DateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1250,7 +1250,7 @@ namespace com.morningstar.rtd.data.polarisetl
         public int? Count { get => _Count; set => _Count = value; }
         public long? DateTime { get => _DateTime; set => _DateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1284,21 +1284,20 @@ namespace com.morningstar.rtd.data.polarisetl
             "{\"type\":\"record\",\"name\":\"TradeRegulatory\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"MMTFlagTransactionCategory\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagMarketMechanism\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagTradingMode\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagDuplicativeTradeIndicator\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"MMTFlagPublicationMode\",\"default\":null,\"type\":[\"null\",\"string\"]}]}"
         );
 
-        private string _MMTFlagTransactionCategory;
-        private string _MMTFlagMarketMechanism;
-        private string _MMTFlagTradingMode;
-        private string _MMTFlagDuplicativeTradeIndicator;
-        private string _MMTFlagPublicationMode;
-
+        private string? _MMTFlagTransactionCategory;
+        private string? _MMTFlagMarketMechanism;
+        private string? _MMTFlagTradingMode;
+        private string? _MMTFlagDuplicativeTradeIndicator;
+        private string? _MMTFlagPublicationMode;
         public virtual Schema Schema => _SCHEMA;
 
-        public string MMTFlagTransactionCategory { get => _MMTFlagTransactionCategory; set => _MMTFlagTransactionCategory = value; }
-        public string MMTFlagMarketMechanism { get => _MMTFlagMarketMechanism; set => _MMTFlagMarketMechanism = value; }
-        public string MMTFlagTradingMode { get => _MMTFlagTradingMode; set => _MMTFlagTradingMode = value; }
-        public string MMTFlagDuplicativeTradeIndicator { get => _MMTFlagDuplicativeTradeIndicator; set => _MMTFlagDuplicativeTradeIndicator = value; }
-        public string MMTFlagPublicationMode { get => _MMTFlagPublicationMode; set => _MMTFlagPublicationMode = value; }
+        public string? MMTFlagTransactionCategory { get => _MMTFlagTransactionCategory; set => _MMTFlagTransactionCategory = value; }
+        public string? MMTFlagMarketMechanism { get => _MMTFlagMarketMechanism; set => _MMTFlagMarketMechanism = value; }
+        public string? MMTFlagTradingMode { get => _MMTFlagTradingMode; set => _MMTFlagTradingMode = value; }
+        public string? MMTFlagDuplicativeTradeIndicator { get => _MMTFlagDuplicativeTradeIndicator; set => _MMTFlagDuplicativeTradeIndicator = value; }
+        public string? MMTFlagPublicationMode { get => _MMTFlagPublicationMode; set => _MMTFlagPublicationMode = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1335,24 +1334,22 @@ namespace com.morningstar.rtd.data.polarisetl
         private double? _Price;
         private int? _Size;
         private long? _ExecutionDateTime;
-        private string _Conditions;
-        private string _IdentificationCode;
+        private string? _Conditions;
+        private string? _IdentificationCode;
         private long? _PublishDateTime;
-        private string _ExecutionVenue;
-        private string _ExecutionCurrency;
-
+        private string? _ExecutionVenue;
+        private string? _ExecutionCurrency;
         public virtual Schema Schema => _SCHEMA;
 
         public double? Price { get => _Price; set => _Price = value; }
         public int? Size { get => _Size; set => _Size = value; }
         public long? ExecutionDateTime { get => _ExecutionDateTime; set => _ExecutionDateTime = value; }
-        public string Conditions { get => _Conditions; set => _Conditions = value; }
-        public string IdentificationCode { get => _IdentificationCode; set => _IdentificationCode = value; }
+        public string? Conditions { get => _Conditions; set => _Conditions = value; }
+        public string? IdentificationCode { get => _IdentificationCode; set => _IdentificationCode = value; }
         public long? PublishDateTime { get => _PublishDateTime; set => _PublishDateTime = value; }
-        public string ExecutionVenue { get => _ExecutionVenue; set => _ExecutionVenue = value; }
-        public string ExecutionCurrency { get => _ExecutionCurrency; set => _ExecutionCurrency = value; }
-
-        public virtual object Get(int fieldPos)
+        public string? ExecutionVenue { get => _ExecutionVenue; set => _ExecutionVenue = value; }
+        public string? ExecutionCurrency { get => _ExecutionCurrency; set => _ExecutionCurrency = value; }
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {
@@ -1392,23 +1389,23 @@ namespace com.morningstar.rtd.data.polarisetl
             "{\"type\":\"record\",\"name\":\"Admin\",\"namespace\":\"com.morningstar.rtd.data.polarisetl\",\"fields\":[{\"name\":\"Notice\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"NoticeType\",\"default\":null,\"type\":[\"null\",{\"type\":\"enum\",\"name\":\"NoticeType\",\"namespace\":\"com.morningstar.rtd.datatypes\",\"symbols\":[\"Unknown\",\"Disconnect\"],\"default\":\"Unknown\"}]},{\"name\":\"Description\",\"default\":null,\"type\":[\"null\",\"string\"]},{\"name\":\"Arbitrate\",\"default\":null,\"type\":[\"null\",\"boolean\"]},{\"name\":\"NoticeMinutes\",\"default\":null,\"type\":[\"null\",\"int\"]},{\"name\":\"NoticeDateTime\",\"default\":null,\"type\":[\"null\",\"long\"]}]}"
         );
 
-        private string _Notice;
+        private string? _Notice;
         private com.morningstar.rtd.datatypes.NoticeType? _NoticeType;
-        private string _Description;
+        private string? _Description;
         private bool? _Arbitrate;
         private int? _NoticeMinutes;
         private long? _NoticeDateTime;
 
         public virtual Schema Schema => _SCHEMA;
 
-        public string Notice { get => _Notice; set => _Notice = value; }
+        public string? Notice { get => _Notice; set => _Notice = value; }
         public com.morningstar.rtd.datatypes.NoticeType? NoticeType { get => _NoticeType; set => _NoticeType = value; }
-        public string Description { get => _Description; set => _Description = value; }
+        public string? Description { get => _Description; set => _Description = value; }
         public bool? Arbitrate { get => _Arbitrate; set => _Arbitrate = value; }
         public int? NoticeMinutes { get => _NoticeMinutes; set => _NoticeMinutes = value; }
         public long? NoticeDateTime { get => _NoticeDateTime; set => _NoticeDateTime = value; }
 
-        public virtual object Get(int fieldPos)
+        public virtual object? Get(int fieldPos)
         {
             return fieldPos switch
             {

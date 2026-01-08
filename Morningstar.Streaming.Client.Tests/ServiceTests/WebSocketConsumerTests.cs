@@ -39,7 +39,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         {
             // Arrange
             var wsUrl = "wss://test.com/stream/12345678-1234-1234-1234-123456789012";
-            var streamingFormat = StreamingFormat.Json;
             var logToFile = true;
 
             // Act
@@ -64,7 +63,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Arrange
             var guid = Guid.NewGuid();
             var wsUrl = $"wss://test.com/stream/{guid}";
-            var streamingFormat = StreamingFormat.Json;
             var logToFile = false;
 
             // Act
@@ -88,7 +86,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         {
             // Arrange
             var wsUrl = "wss://test.com/stream/not-a-valid-guid";
-            var streamingFormat = StreamingFormat.Json;
             var logToFile = true;
 
             // Act
@@ -113,7 +110,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Arrange
             var guid = Guid.NewGuid();
             var wsUrl = $"wss://test.com/stream/{guid}";
-            var streamingFormat = StreamingFormat.Json;
             var logToFile = false;
 
             mockClient
@@ -149,7 +145,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Arrange
             var guid = Guid.NewGuid();
             var wsUrl = $"wss://test.com/stream/{guid}";
-            var streamingFormat = StreamingFormat.Json;
             var logToFile = false;
 
             mockClient

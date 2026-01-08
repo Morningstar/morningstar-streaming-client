@@ -12,7 +12,7 @@ namespace Morningstar.Streaming.Domain.Contracts
         /// A list of Morningstar Performance Ids.
         /// </summary>
         [DataMember]
-        public List<Investments> Investments { get; set; }
+        public List<Investments> Investments { get; set; } = null!;
 
         /// <summary>
         /// A list of event types to subscribe to.
@@ -40,6 +40,6 @@ namespace Morningstar.Streaming.Domain.Contracts
         ///  * "TradeCorrection" - Corrected trade details.
         /// </summary>
         [DataMember]
-        public string[] EventTypes { get; set; }
+        public string[] EventTypes { get; set; } = null!;
     }
 }

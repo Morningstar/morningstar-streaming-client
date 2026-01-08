@@ -69,13 +69,13 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
             var decoder = new BinaryDecoder(inputStream);
             var reader = new GenericDatumReader<GenericRecord>(schema, schema);
 
-            var record = reader.Read(null, decoder);
+            var record = reader.Read(null!, decoder);
 
             // 5. Convert to JSON
             return ConvertGenericRecordToJson<T>(record);
         }
 
-        public async Task<TSpecificRecord?> DeserializeSpecificAsync<TSpecificRecord>(byte[] binaryData)
+        public TSpecificRecord? DeserializeSpecific<TSpecificRecord>(byte[] binaryData)
             where TSpecificRecord : class, ISpecificRecord, new()
         {
             if (binaryData.Length < 6)
@@ -100,7 +100,7 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
             var decoder = new BinaryDecoder(inputStream);
             var reader = new SpecificDatumReader<TSpecificRecord>(schema, schema);
 
-            var record = reader.Read(default, decoder);
+            var record = reader.Read(default!, decoder);
 
             // 4. Return the strongly-typed record
             return record;

@@ -6,6 +6,6 @@ namespace Morningstar.Streaming.Domain.Contracts
     public class StartSubscriptionRequest : SubscriptionBaseRequest
     {
         [DataMember]
-        public StreamRequest Stream { get; set; }
+        public StreamRequest Stream { get; set; } = null!;
     }
 }

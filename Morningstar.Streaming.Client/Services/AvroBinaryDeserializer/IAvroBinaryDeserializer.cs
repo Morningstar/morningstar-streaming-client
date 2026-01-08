@@ -20,7 +20,7 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
         /// <typeparam name="TSpecificRecord">The Avro SpecificRecord type that implements ISpecificRecord</typeparam>
         /// <param name="binaryData">The binary data to deserialize</param>
         /// <returns>The strongly-typed SpecificRecord instance</returns>
-        Task<TSpecificRecord?> DeserializeSpecificAsync<TSpecificRecord>(byte[] binaryData)
+        TSpecificRecord? DeserializeSpecific<TSpecificRecord>(byte[] binaryData)
             where TSpecificRecord : class, ISpecificRecord, new();
     }
 }
