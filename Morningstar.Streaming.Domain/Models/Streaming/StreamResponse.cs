@@ -38,5 +38,4 @@ namespace Morningstar.Streaming.Domain
         public required string Status { get; set; }
         public required string ErrorCode { get; set; }
     }
-
 }

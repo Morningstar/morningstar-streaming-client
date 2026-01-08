@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Services.Counter;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain.Constants;
 
@@ -15,6 +16,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<ILogger<WebSocketConsumer>> mockLogger;
         private readonly Mock<IStreamingApiClient> mockClient;
         private readonly Mock<ILogger> mockEventsLogger;
+        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
 
         public WebSocketConsumerTests()
         {
@@ -24,6 +26,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockLogger = new Mock<ILogger<WebSocketConsumer>>();
             mockClient = new Mock<IStreamingApiClient>();
             mockEventsLogger = new Mock<ILogger>();
+            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup default WebSocketLoggerFactory behavior
             mockWsLoggerFactory
@@ -45,6 +48,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -69,6 +73,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -92,6 +97,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -122,6 +128,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -157,6 +164,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -191,6 +199,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -233,6 +242,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -270,6 +280,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -313,6 +324,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -357,6 +369,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -409,6 +422,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -454,6 +468,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -491,6 +506,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -538,6 +554,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -579,6 +596,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
+                mockObservableMetric.Object,
                 wsUrl,
                 logToFile
             );
@@ -594,6 +612,49 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var unregisterIndex = callOrder.IndexOf("Unregister");
             var subscribeIndex = callOrder.IndexOf("Subscribe");
             unregisterIndex.Should().BeGreaterThan(subscribeIndex, "should unregister after subscribing");
+        }
+
+        [Fact]
+        public async Task StartConsumingAsync_WithUnexpectedDisconnection_DisconnectionMetricRecorded()
+        {
+            // Arrange
+            var guid = Guid.NewGuid();
+            var wsUrl = $"wss://test.com/stream/{guid}";
+            var logToFile = true;
+
+            mockClient
+                .Setup(x => x.SubscribeAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns(async () =>
+                {
+                    await Task.Delay(100);
+                    throw new Exception("WebSocket connection lost unexpectedly");
+                });
+
+            var consumer = new WebSocketConsumer(
+                mockCounterLogger.Object,
+                mockWsLoggerFactory.Object,
+                mockLogger.Object,
+                mockClient.Object,
+                mockObservableMetric.Object,
+                wsUrl,
+                logToFile
+            );
+
+            using var cts = new CancellationTokenSource();
+
+            // Act
+            var consumeTask = consumer.StartConsumingAsync(cts.Token);
+            await consumeTask;
+
+            // Assert
+            mockObservableMetric.Verify(x => x.RecordMetric(
+                "WebSocketDisconnections",
+                It.IsAny<AtomicLong>(),
+                It.IsAny<Dictionary<string, string>>()),
+                Times.Once);
         }
     }
 }

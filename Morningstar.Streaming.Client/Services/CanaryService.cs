@@ -118,7 +118,6 @@ namespace Morningstar.Streaming.Client.Services
             catch (InvalidOperationException ex)
             {
                 logger.LogWarning(ex, "Attempted to stop non-existent subscription {SubscriptionGuid}", guid);
-                
                 return Task.FromResult(new StopSubscriptionResponse
                 {
                     Success = false,
@@ -148,7 +147,6 @@ namespace Morningstar.Streaming.Client.Services
         {
             var consumer = factory.Create(wsUrl, logToFile);
             await consumer.StartConsumingAsync(token);
-            
         }
     }
 }
