@@ -109,7 +109,38 @@ class Program
                         new Investments
                         {
                             IdType = "PerformanceId",
-                            Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                            Ids = new List<string> { 
+                                "0P0000038R",
+                                "0P000003X1",
+                                "0P0001HD8R",
+                                "0P0000000Y",
+                                "0P0000015E",
+                                "0P0000016N",
+                                "0P0000003P",
+                                "0P000000WB",
+                                "0P0000019F",
+                                "0P0000P3FS",
+                                "0P000002CR",
+                                "0P0000032S",
+                                "0P0000014I",
+                                "0P000001V4",
+                                "0P000005B5",
+                                "0P0000036H",
+                                "0P00015KGA",
+                                "0P0000042C",
+                                "0P0000007L",
+                                "0P0000051F",
+                                "0P0001478O",
+                                "0P000001NV",
+                                "0P000002XV",
+                                "0P000005TG",
+                                "0P0000SQOK",
+                                "0P000001GL",
+                                "0P000000YM",
+                                "0P000000T6",
+                                "0P0000M76Q",
+                                "0P000003LS",
+                                "0P000001RL" }
                         }
                     },
                     EventTypes = new[]
@@ -132,7 +163,8 @@ class Program
                         EventTypes.TradeCorrection
                     }
                 },
-                DurationSeconds = 300 // Run for 5 minutes
+                DurationSeconds = 120, // Run for 2 minutes
+                StreamingFormat = "json" // Specify streaming format as json or avro
             };
 
             logger.LogInformation("Starting Level 1 subscription...");
