@@ -1,12 +1,9 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
-using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
-using Morningstar.Streaming.Domain.Contracts;
 using Newtonsoft.Json;
 using System.Net.WebSockets;
 using System.Text;
@@ -21,7 +18,6 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
         private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(15);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
-        private string? streamingFormat;
 
         public StreamingApiClient(
             IApiHelper apiHelper,  
