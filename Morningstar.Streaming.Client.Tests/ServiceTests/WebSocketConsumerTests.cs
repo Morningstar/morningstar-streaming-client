@@ -615,7 +615,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StartConsumingAsync_WithUnexpectedDisconnectiion_DiconectionMetricRecored()
+        public async Task StartConsumingAsync_WithUnexpectedDisconnection_DisconnectionMetricRecorded()
         {
             // Arrange
             var guid = Guid.NewGuid();
