@@ -70,7 +70,7 @@ class Program
                 services.AddStreamingServices();
 
                 // If you want background counter logging, uncomment the following line:
-                services.AddStreamingHostedServices();
+                // services.AddStreamingHostedServices();
             });
 
     /// <summary>
