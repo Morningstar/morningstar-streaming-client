@@ -116,16 +116,11 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     logger.LogWarning(ex, "WebSocket failed (attempt {Attempt} of {MaxAttempts}). Reconnecting...", attempt, maxAttempts);
 
-                    // If connection failed, signal failure if not already set
-                    if (attempt == 1 && !connectedTcs.Task.IsCompleted)
-                    {
-                        connectedTcs.TrySetException(ex);
-                    }
-
-                    // Check if we've exhausted all attempts
                     if (attempt >= maxAttempts)
                     {
                         logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
+                        if (!connectedTcs.Task.IsCompleted)
+                            connectedTcs.TrySetException(ex);
                         throw;
                     }
 
