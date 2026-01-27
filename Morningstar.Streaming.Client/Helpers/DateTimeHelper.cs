@@ -5,7 +5,7 @@ namespace Morningstar.Streaming.Client.Helpers;
 public static class DateTimeHelper
 {
     private static readonly DateTimeOffset EpochDateTimeOffset = DateTimeOffset.UnixEpoch;
-    
+
     /// <summary>
     /// Converts nanoseconds since midnight (UTC) to an ISO 8601 formatted date-time string.
     /// </summary>
@@ -18,7 +18,7 @@ public static class DateTimeHelper
         var executionTime = utcNowDateTicks + tradeExecutionTimeTicks;
         return new DateTime(executionTime, DateTimeKind.Utc).ToIsoFormat();
     }
-    
+
     /// <summary>
     /// Converts nanoseconds since Unix epoch to an ISO 8601 formatted date-time string with 7-digit fractional seconds.
     /// </summary>
@@ -36,13 +36,13 @@ public static class DateTimeHelper
 
         return dateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
     }
-    
+
     /// <summary>
     /// Gets the current UTC time as milliseconds since Unix epoch.
     /// </summary>
     /// <returns>Milliseconds elapsed since Unix epoch (January 1, 1970)</returns>
     public static long MillisFromEpoch() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    
+
     /// <summary>
     /// Gets the current UTC time as nanoseconds since Unix epoch.
     /// </summary>

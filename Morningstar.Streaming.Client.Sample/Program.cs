@@ -36,7 +36,7 @@ class Program
         // Build the host with dependency injection and configuration
         var host = CreateHostBuilder(args).Build();
         await host.StartAsync();
-        
+
         // Run the example
         await RunExampleAsync(host.Services);
 
@@ -70,7 +70,7 @@ class Program
                 services.AddStreamingServices();
 
                 // If you want background counter logging, uncomment the following line:
-                // services.AddStreamingHostedServices();
+                services.AddStreamingHostedServices();
             });
 
     /// <summary>
@@ -84,7 +84,7 @@ class Program
 
         try
         {
-            
+
             // Example: Start a new Level 1 subscription
             // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
             // This is just a demonstration of the Streaming API Subscription functionality            
@@ -150,7 +150,7 @@ class Program
                     "Subscription started successfully! GUID: {Guid}, Started: {StartedAt}, Expires: {ExpiresAt}",
                     response.SubscriptionGuid,
                     response.StartedAt,
-                    response.ExpiresAt);                
+                    response.ExpiresAt);
 
                 var activeSubscriptions = canaryService.GetActiveSubscriptions();
                 logger.LogInformation("Active subscriptions: {Count}", activeSubscriptions.Count);
@@ -172,14 +172,14 @@ class Program
                 {
                     logger.LogInformation("Stopping subscription...");
                     var stopResult = await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
-                    
+
                     if (stopResult.Success)
                     {
                         logger.LogInformation("Subscription stopped successfully: {Message}", stopResult.Message);
                     }
                     else
                     {
-                        logger.LogError("Failed to stop subscription. Error: {ErrorCode}, Message: {Message}", 
+                        logger.LogError("Failed to stop subscription. Error: {ErrorCode}, Message: {Message}",
                             stopResult.ErrorCode, stopResult.Message);
                     }
                 }

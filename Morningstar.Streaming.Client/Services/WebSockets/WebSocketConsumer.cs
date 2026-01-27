@@ -44,7 +44,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             eventsLogger = wsLoggerFactory.GetLogger(topicGuid);
         }
 
-        public async Task StartConsumingAsync(CancellationToken cancellationToken = default)
+        public async Task StartConsumingAsync(TaskCompletionSource<bool> connectedTcs, CancellationToken cancellationToken = default)
         {
             counterLogger.RegisterSubscription(topicGuid);
             var logTask = LogFromChannelAsync(cancellationToken);
@@ -62,6 +62,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         counterLogger.Increment(topicGuid);
                         await Task.CompletedTask;
                     },
+                    connectedTcs,
                     cancellationToken);
 
                 // Wait for either task to complete

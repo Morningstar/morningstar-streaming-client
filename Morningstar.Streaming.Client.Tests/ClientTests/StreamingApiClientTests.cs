@@ -24,7 +24,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         public StreamingApiClientTests()
         {
             // Arrange - Initialize mocks
-            mockApiHelper = new Mock<IApiHelper>();            
+            mockApiHelper = new Mock<IApiHelper>();
             mockTokenProvider = new Mock<ITokenProvider>();
             mockLogger = new Mock<ILogger<StreamingApiClient>>();
             mockAvroBinaryDeserializer = new Mock<IAvroBinaryDeserializer>();
@@ -167,8 +167,12 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Cancel immediately before calling
 
+            var completed = new TaskCompletionSource<bool>();
+
             // Act
-            await streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+
+            await Task.WhenAny(completed.Task, subscribeTask);
 
             // Assert
             messageReceived.Should().BeFalse();
@@ -184,15 +188,12 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             using var cts = new CancellationTokenSource();
             cts.CancelAfter(50);
 
+            var completed = new TaskCompletionSource<bool>();
+
             // Act
-            try
-            {
-                await streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, cts.Token);
-            }
-            catch
-            {
-                // Expected - connection will fail or be cancelled
-            }
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+
+            await Task.WhenAny(completed.Task, subscribeTask);
 
             // Assert
             mockLogger.Verify(
@@ -215,10 +216,14 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             Func<string, Task> onMessageAsync = async (message) => await Task.CompletedTask;
 
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(450); // Allow time for at least one retry attempt
+            cts.CancelAfter(750); // Allow time for at least one retry attempt
+
+            var completed = new TaskCompletionSource<bool>();
 
             // Act
-            await streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+
+            await Task.WhenAny(completed.Task, subscribeTask);
 
             // Assert
             mockLogger.Verify(

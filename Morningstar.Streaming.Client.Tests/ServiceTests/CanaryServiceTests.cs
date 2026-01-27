@@ -81,7 +81,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -133,7 +134,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -215,7 +217,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -266,7 +269,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -332,7 +336,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -473,7 +478,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StartLevel1SubscriptionAsync_AddsSubscriptionToManagerBeforeStartingConsumers()
+        public async Task AddsSubscriptionToManagerAfterStartingConsumers()
         {
             // Arrange
             var request = new StartSubscriptionRequest
@@ -495,16 +500,20 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.CreateAsync(request))
                 .ReturnsAsync(streamResult);
 
-            var addCalled = false;
+            var callSequence = new List<string>();
             mockSubscriptionManager
                 .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Callback(() => addCalled = true)
+                .Callback(() => callSequence.Add("TryAdd"))
                 .Returns(true);
 
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<CancellationToken>()))
-                .Callback(() => addCalled.Should().BeTrue("TryAdd should be called before starting consumers"))
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) =>
+                {
+                    callSequence.Add("StartConsumingAsync");
+                    tcs.SetResult(true);
+                })
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
@@ -515,7 +524,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
             // Assert
-            addCalled.Should().BeTrue();
+            callSequence.Should().ContainInOrder("StartConsumingAsync", "TryAdd");
         }
     }
 }

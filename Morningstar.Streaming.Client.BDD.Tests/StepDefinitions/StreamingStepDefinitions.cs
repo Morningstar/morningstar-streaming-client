@@ -59,7 +59,8 @@ public class StreamingStepDefinitions
 
         // Setup WebSocket consumer to simulate successful message receiving
         webSocketConsumerMock
-            .Setup(w => w.StartConsumingAsync(It.IsAny<CancellationToken>()))
+            .Setup(w => w.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+            .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
             .Returns(Task.CompletedTask);
 
         // Initialize CanaryService with mocks
@@ -166,7 +167,7 @@ public class StreamingStepDefinitions
 
         // Setup mock consumer to simulate disconnection
         webSocketConsumerMock
-            .Setup(w => w.StartConsumingAsync(It.IsAny<CancellationToken>()))
+            .Setup(w => w.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Connection lost unexpectedly"));
     }
 
@@ -233,7 +234,8 @@ public class StreamingStepDefinitions
     {
         // Reset mock to allow successful connection
         webSocketConsumerMock
-            .Setup(w => w.StartConsumingAsync(It.IsAny<CancellationToken>()))
+            .Setup(w => w.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+            .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
             .Returns(Task.CompletedTask);
 
         // Create new subscription to simulate reconnection
@@ -265,7 +267,7 @@ public class StreamingStepDefinitions
         // 2. New subscription was created with valid GUID
         // 3. WebSocket consumer is actively consuming messages
         webSocketConsumerMock.Verify(
-            w => w.StartConsumingAsync(It.IsAny<CancellationToken>()),
+            w => w.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()),
             Times.AtLeastOnce,
             "WebSocket consumer should be actively consuming messages after reconnection");
 

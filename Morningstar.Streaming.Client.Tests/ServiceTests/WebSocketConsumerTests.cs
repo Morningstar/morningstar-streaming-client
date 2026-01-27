@@ -116,6 +116,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
@@ -132,8 +133,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             mockCounterLogger.Verify(x => x.RegisterSubscription(guid), Times.Once);
@@ -151,6 +154,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
@@ -167,8 +171,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             mockCounterLogger.Verify(x => x.UnregisterSubscription(guid), Times.Once);
@@ -186,6 +192,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     wsUrl,
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
@@ -202,14 +209,17 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             mockClient.Verify(
                 x => x.SubscribeAsync(
                     $"{wsUrl}",
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -227,9 +237,14 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, CancellationToken>(
-                    (url, callback, token) => capturedToken = token)
+                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
+                    (url, callback, tcs, token) =>
+                    {
+                        capturedToken = token;
+                        tcs.SetResult(true);
+                    })
                 .Returns(Task.CompletedTask);
 
             var consumer = new WebSocketConsumer(
@@ -245,8 +260,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             capturedToken.Should().Be(cts.Token);
@@ -265,9 +282,14 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, CancellationToken>(
-                    (url, callback, token) => messageCallback = callback)
+                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
+                    (url, callback, tcs, token) =>
+                    {
+                        messageCallback = callback;
+                        tcs.SetResult(true);
+                    })
                 .Returns(Task.CompletedTask);
 
             var consumer = new WebSocketConsumer(
@@ -283,7 +305,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
-            await consumer.StartConsumingAsync(cts.Token);
+            var connectedTcs = new TaskCompletionSource<bool>();
+
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Act
             messageCallback.Should().NotBeNull();
@@ -309,9 +333,14 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, CancellationToken>(
-                    (url, callback, token) => messageCallback = callback)
+                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
+                    (url, callback, tcs, token) =>
+                    {
+                        messageCallback = callback;
+                        tcs.SetResult(true);
+                    })
                 .Returns(Task.CompletedTask);
 
             var consumer = new WebSocketConsumer(
@@ -327,7 +356,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
-            await consumer.StartConsumingAsync(cts.Token);
+            var connectedTcs = new TaskCompletionSource<bool>();
+
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Act
             messageCallback.Should().NotBeNull();
@@ -354,9 +385,14 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, CancellationToken>(
-                    (url, callback, token) => messageCallback = callback)
+                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
+                    (url, callback, tcs, token) =>
+                    {
+                        messageCallback = callback;
+                        tcs.SetResult(true);
+                    })
                 .Returns(Task.CompletedTask);
 
             var consumer = new WebSocketConsumer(
@@ -372,7 +408,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel to exit quickly
 
-            await consumer.StartConsumingAsync(cts.Token);
+            var connectedTcs = new TaskCompletionSource<bool>();
+
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Act
             if (messageCallback != null)
@@ -406,6 +444,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(async () =>
                 {
@@ -424,8 +463,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             using var cts = new CancellationTokenSource();
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            var consumeTask = consumer.StartConsumingAsync(cts.Token);
+            var consumeTask = consumer.StartConsumingAsync(connectedTcs, cts.Token);
             await Task.Delay(50); // Let it start
             await cts.CancelAsync(); // Cancel after starting
             tcs.SetResult(true); // Complete the subscription task
@@ -455,6 +496,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
@@ -471,8 +513,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync(); // Pre-cancel
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            Func<Task> act = async () => await consumer.StartConsumingAsync(cts.Token);
+            Func<Task> act = async () => await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             await act.Should().NotThrowAsync();
@@ -491,9 +535,14 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, CancellationToken>(
-                    (url, callback, token) => messageCallback = callback)
+                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
+                    (url, callback, tcs, token) =>
+                    {
+                        messageCallback = callback;
+                        tcs.SetResult(true);
+                    })
                 .Returns(Task.CompletedTask);
 
             var consumer = new WebSocketConsumer(
@@ -508,8 +557,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync();
+            var connectedTcs = new TaskCompletionSource<bool>();
 
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Act
             messageCallback.Should().NotBeNull();
@@ -540,6 +590,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Callback(() => callOrder.Add("Subscribe"))
                 .Returns(Task.CompletedTask);
@@ -557,8 +608,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync();
 
+            var connectedTcs = new TaskCompletionSource<bool>();
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             callOrder.Should().HaveCountGreaterOrEqualTo(2);
@@ -578,6 +630,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Callback(() => callOrder.Add("Subscribe"))
                 .Returns(Task.CompletedTask);
@@ -599,8 +652,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             using var cts = new CancellationTokenSource();
             await cts.CancelAsync();
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            await consumer.StartConsumingAsync(cts.Token);
+            await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
             callOrder.Should().Contain("Unregister");
@@ -621,6 +676,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
                     It.IsAny<Func<string, Task>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
                 .Returns(async () =>
                 {
@@ -640,8 +696,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             using var cts = new CancellationTokenSource();
 
+            var connectedTcs = new TaskCompletionSource<bool>();
+
             // Act
-            var consumeTask = consumer.StartConsumingAsync(cts.Token);
+            var consumeTask = consumer.StartConsumingAsync(connectedTcs, cts.Token);
             await consumeTask;
 
             // Assert

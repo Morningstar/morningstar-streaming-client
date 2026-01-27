@@ -16,7 +16,8 @@ namespace Morningstar.Streaming.Client.Clients
         /// </summary>
         /// <param name="webSocketUrl">The WebSocket URL to connect to</param>
         /// <param name="onMessageAsync">Callback function to process incoming messages</param>
+        /// <param name="completed">TaskCompletionSource to signal when subscription is completed</param>
         /// <param name="cancellationToken">Cancellation token to stop the subscription</param>
-        Task SubscribeAsync(string webSocketUrl, Func<string, Task> onMessageAsync, CancellationToken cancellationToken = default);
+        Task SubscribeAsync(string webSocketUrl, Func<string, Task> onMessageAsync, TaskCompletionSource<bool> completed, CancellationToken cancellationToken = default);
     }
 }
