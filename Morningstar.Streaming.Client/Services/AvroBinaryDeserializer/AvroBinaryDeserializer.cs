@@ -120,7 +120,7 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             });
 
-            if(typeof(T) == typeof(string))
+            if (typeof(T) == typeof(string))
             {
                 return (T)(object)serializedDict;
             }

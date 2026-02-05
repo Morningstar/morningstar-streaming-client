@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.WebSockets;
+using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
@@ -57,25 +58,57 @@ namespace Morningstar.Streaming.Client.Services
                 };
             }
 
+            var succeededUrls = new List<string>();
+            var consumerTasks = new List<Task>();
+            var consumerStartExceptions = new List<(string Url, Exception Ex)>();
+
             var sub = new SubscriptionGroup
             {
                 Guid = Guid.NewGuid(),
-                WebSocketUrls = streamResult.WebSocketUrls,
+                WebSocketUrls = new List<string>(),
                 StartedAt = DateTime.UtcNow,
                 ExpiresAt = req.DurationSeconds.HasValue ? DateTime.UtcNow.AddSeconds(req.DurationSeconds.Value) : null,
                 CancellationTokenSource = streamResult.CancellationTokenSource,
             };
 
-            subscriptionManager.TryAdd(sub);
-
-            var consumerTasks = new List<Task>();
             foreach (var url in streamResult.WebSocketUrls)
             {
                 var wsUrl = $"{url}/{req.StreamingFormat}";
-                var task = Task.Run(() => ConsumeWebSocketStreamAsync(wsUrl, sub, logMessages, sub.CancellationTokenSource.Token));
-                consumerTasks.Add(task);
+                try
+                {
+                    var consumer = factory.Create(wsUrl, logMessages);
+                    var connectedTcs = new TaskCompletionSource<bool>();
+                    var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
+                    await connectedTcs.Task; 
+                    consumerTasks.Add(startTask);
+                    succeededUrls.Add(url);
+                }
+                catch (Exception ex)
+                {
+                    consumerStartExceptions.Add((url, ex));
+                }
             }
 
+            // Only keep succeeded URLs in the subscription
+            sub.WebSocketUrls = succeededUrls;
+
+            if (succeededUrls.Count == 0)
+            {
+                logger.LogError("Failed to start all WebSocket consumers: {Errors}", string.Join("; ", consumerStartExceptions.Select(e => $"{e.Url}: {e.Ex.Message}")));
+                return new StartSubscriptionResponse
+                {
+                    ApiResponse = new StreamResponse
+                    {
+                        StatusCode = HttpStatusCode.InternalServerError,
+                        Message = "Failed to start any WebSocket consumers."
+                    }
+                };
+            }
+
+            // Add to subscriptionManager if at least one succeeded
+            subscriptionManager.TryAdd(sub);
+
+            // Start background task to monitor consumers and remove subscription when done
             _ = Task.Run(async () =>
             {
                 try
@@ -93,6 +126,24 @@ namespace Morningstar.Streaming.Client.Services
                 }
             });
 
+            // If some failed, return partial success
+            if (consumerStartExceptions.Count > 0)
+            {
+                logger.LogWarning("Some WebSocket consumers failed to start: {Errors}", string.Join("; ", consumerStartExceptions.Select(e => $"{e.Url}: {e.Ex.Message}")));
+                return new StartSubscriptionResponse
+                {
+                    SubscriptionGuid = sub.Guid,
+                    StartedAt = sub.StartedAt,
+                    ExpiresAt = sub.ExpiresAt,
+                    ApiResponse = new StreamResponse
+                    {
+                        StatusCode = HttpStatusCode.PartialContent,
+                        Message = $"Some WebSocket consumers failed to start: {string.Join("; ", consumerStartExceptions.Select(e => $"{e.Url}: {e.Ex.Message}"))}"
+                    }
+                };
+            }
+
+            // All succeeded
             return new StartSubscriptionResponse
             {
                 SubscriptionGuid = sub.Guid,
@@ -143,10 +194,10 @@ namespace Morningstar.Streaming.Client.Services
         /// Protected method for consuming WebSocket streams.
         /// Can be used by derived classes for custom subscription implementations.
         /// </summary>
-        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, SubscriptionGroup sub, bool logToFile, CancellationToken token)
+        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, SubscriptionGroup sub, bool logToFile, TaskCompletionSource<bool> connectedTcs, CancellationToken token)
         {
             var consumer = factory.Create(wsUrl, logToFile);
-            await consumer.StartConsumingAsync(token);
+            await consumer.StartConsumingAsync(connectedTcs, token);
         }
     }
 }

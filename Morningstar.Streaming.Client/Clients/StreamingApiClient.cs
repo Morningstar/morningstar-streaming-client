@@ -20,8 +20,8 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
 
         public StreamingApiClient(
-            IApiHelper apiHelper,  
-            ILogger<StreamingApiClient> logger, 
+            IApiHelper apiHelper,
+            ILogger<StreamingApiClient> logger,
             ITokenProvider tokenProvider,
             IAvroBinaryDeserializer avroBinaryDeserializer)
         {
@@ -60,26 +60,28 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         /// <summary>
-        /// Subscribes to a WebSocket stream for real-time market data.
-        /// Automatically handles connection, reconnection (up to 3 attempts), heartbeat monitoring, and message processing.
+        /// Subscribes to a WebSocket stream and signals when the connection is established.
         /// </summary>
         /// <param name="webSocketUrl">The WebSocket URL to connect to</param>
         /// <param name="onMessageAsync">Callback function to process incoming messages</param>
-        /// <param name="cancellationToken">Cancellation token to stop the subscription</param>
+        /// <param name="connectedTcs">TaskCompletionSource that completes when connected (optional)</param>
+        /// <param name="cancellationToken">Cancellation token</param>
         public async Task SubscribeAsync(
-        string webSocketUrl,
-        Func<string, Task> onMessageAsync,
-        CancellationToken cancellationToken = default)
+            string webSocketUrl,
+            Func<string, Task> onMessageAsync,
+            TaskCompletionSource<bool> connectedTcs,
+            CancellationToken cancellationToken = default)
         {
-            await ConnectWithRetryAsync(webSocketUrl, onMessageAsync, cancellationToken);
+            await ConnectWithRetryAsync(webSocketUrl, onMessageAsync, connectedTcs, cancellationToken);
         }
 
         private async Task ConnectWithRetryAsync(
-        string webSocketUrl,
-        Func<string, Task> onMessageAsync,
-        CancellationToken cancellationToken)
+            string webSocketUrl,
+            Func<string, Task> onMessageAsync,
+            TaskCompletionSource<bool> connectedTcs,
+            CancellationToken cancellationToken)
         {
-            const int maxAttempts = 3;
+            const int maxAttempts = 5;
             int attempt = 0;
 
             while (!cancellationToken.IsCancellationRequested)
@@ -91,6 +93,9 @@ namespace Morningstar.Streaming.Client.Clients
                     using var ws = await ConnectWebSocketAsync(webSocketUrl, cancellationToken);
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
+
+                    // Signal connection established
+                    connectedTcs.TrySetResult(true);
 
                     // Reset attempt counter after successful connection
                     attempt = 0;
@@ -104,16 +109,18 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     // Only exit if cancellation was explicitly requested
                     logger.LogInformation(ex, "Cancellation requested. Stopping WebSocket connection.");
+                    if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
                     return;
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "WebSocket failed (attempt {Attempt} of {MaxAttempts}). Reconnecting...", attempt, maxAttempts);
 
-                    // Check if we've exhausted all attempts
                     if (attempt >= maxAttempts)
                     {
                         logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
+                        if (!connectedTcs.Task.IsCompleted)
+                            connectedTcs.TrySetException(ex);
                         throw;
                     }
 
@@ -121,6 +128,7 @@ namespace Morningstar.Streaming.Client.Clients
                     if (cancellationToken.IsCancellationRequested)
                     {
                         logger.LogInformation("Cancellation requested during reconnect delay. Stopping WebSocket connection.");
+                        if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
                         return;
                     }
 
@@ -133,6 +141,7 @@ namespace Morningstar.Streaming.Client.Clients
                     {
                         // Cancellation during delay - exit gracefully
                         logger.LogInformation(delayEx, "Cancellation requested during reconnect delay. Stopping WebSocket connection.");
+                        if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
                         return;
                     }
                 }
@@ -197,14 +206,14 @@ namespace Morningstar.Streaming.Client.Clients
                 if (result.MessageType == WebSocketMessageType.Binary)
                 {
                     try
-                    {                     
-                        var payload = buffer.AsSpan(0, result.Count).ToArray();                        
+                    {
+                        var payload = buffer.AsSpan(0, result.Count).ToArray();
                         var jsonMessage = await avroBinaryDeserializer.DeserializeAsync<string>(payload);
                         if (jsonMessage == null)
                         {
                             logger.LogWarning("Deserialized message is null. Skipping.");
                             continue;
-                        }       
+                        }
 
                         if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase)
                          || jsonMessage.Contains("\"EventTypes\":[\"Admin\"]", StringComparison.OrdinalIgnoreCase))
@@ -212,7 +221,7 @@ namespace Morningstar.Streaming.Client.Clients
                             lastHeartbeat = DateTime.UtcNow;
                             await SendHeartbeatAckAsync(ws, cancellationToken);
                             continue;
-                        }    
+                        }
 
                         await onMessageAsync(jsonMessage);
                     }
