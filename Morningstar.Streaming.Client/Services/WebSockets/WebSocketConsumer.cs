@@ -12,6 +12,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly IStreamingApiClient client;
         private readonly string wsUrl;
         private readonly bool logToFile;
+        private readonly string? purpose;
 
         private readonly ICounterLogger counterLogger;
         private readonly IObservableMetric<IMetric>? observableMetric;
@@ -27,13 +28,15 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             IStreamingApiClient client,
             IObservableMetric<IMetric>? observableMetric,
             string wsUrl,
-            bool logToFile
+            bool logToFile,
+            string? purpose
         )
         {
             this.logger = logger;
             this.client = client;
             this.wsUrl = wsUrl;
             this.logToFile = logToFile;
+            this.purpose = purpose;
             this.counterLogger = counterLogger;
             this.observableMetric = observableMetric;
 
@@ -53,6 +56,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             {
                 var subTask = client.SubscribeAsync(
                     wsUrl,
+                    purpose,
                     async message =>
                     {
                         if (!channel.Writer.TryWrite(message))

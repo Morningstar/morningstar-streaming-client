@@ -49,7 +49,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             // Assert
@@ -73,7 +74,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             // Assert
@@ -96,7 +98,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             // Assert
@@ -115,6 +118,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -127,7 +131,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -153,6 +158,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -165,7 +171,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -191,6 +198,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     wsUrl,
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -203,7 +211,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -218,6 +227,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient.Verify(
                 x => x.SubscribeAsync(
                     $"{wsUrl}",
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()),
@@ -236,11 +246,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
-                    (url, callback, tcs, token) =>
+                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         capturedToken = token;
                         tcs.SetResult(true);
@@ -254,7 +264,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -281,11 +292,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
-                    (url, callback, tcs, token) =>
+                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -299,7 +310,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -332,11 +344,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
-                    (url, callback, tcs, token) =>
+                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -350,7 +362,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -384,11 +397,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
-                    (url, callback, tcs, token) =>
+                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -402,7 +415,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -443,6 +457,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -458,7 +473,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -495,6 +511,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -507,7 +524,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -534,11 +552,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback<string, Func<string, Task>, TaskCompletionSource<bool>, CancellationToken>(
-                    (url, callback, tcs, token) =>
+                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -552,7 +570,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -589,6 +608,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -602,7 +622,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -629,6 +650,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -646,7 +668,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();
@@ -675,6 +698,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockClient
                 .Setup(x => x.SubscribeAsync(
                     It.IsAny<string>(),
+                    It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
@@ -691,7 +715,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockClient.Object,
                 mockObservableMetric.Object,
                 wsUrl,
-                logToFile
+                logToFile,
+                null
             );
 
             using var cts = new CancellationTokenSource();

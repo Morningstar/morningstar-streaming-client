@@ -53,7 +53,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = true;
 
             // Act
-            var result = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var result = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             result.Should().NotBeNull();
@@ -69,7 +69,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = true;
 
             // Act
-            var result = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var result = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             result.Should().NotBeNull();
@@ -84,7 +84,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = false;
 
             // Act
-            var result = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var result = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             result.Should().NotBeNull();
@@ -99,8 +99,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var wsUrl2 = "wss://test.com/stream/22222222-2222-2222-2222-222222222222";
 
             // Act
-            var consumer1 = webSocketConsumerFactory.Create(wsUrl1, true);
-            var consumer2 = webSocketConsumerFactory.Create(wsUrl2, false);
+            var consumer1 = webSocketConsumerFactory.Create(wsUrl1, true, null);
+            var consumer2 = webSocketConsumerFactory.Create(wsUrl2, false, null);
 
             // Assert
             consumer1.Should().NotBeNull();
@@ -116,7 +116,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = false;
 
             // Act
-            var result = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var result = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             result.Should().NotBeNull();
@@ -132,7 +132,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = true;
 
             // Act
-            var result = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var result = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             result.Should().NotBeNull();
@@ -147,8 +147,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var logToFile = true;
 
             // Act
-            var consumer1 = webSocketConsumerFactory.Create(wsUrl, logToFile);
-            var consumer2 = webSocketConsumerFactory.Create(wsUrl, logToFile);
+            var consumer1 = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
+            var consumer2 = webSocketConsumerFactory.Create(wsUrl, logToFile, null);
 
             // Assert
             consumer1.Should().NotBeNull();

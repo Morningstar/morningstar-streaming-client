@@ -86,7 +86,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act
@@ -139,7 +139,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act
@@ -222,7 +222,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act
@@ -274,7 +274,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act
@@ -285,7 +285,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             // Assert
             mockWebSocketConsumerFactory.Verify(
-                x => x.Create(It.IsAny<string>(), false),
+                x => x.Create(It.IsAny<string>(), false, It.IsAny<string?>()),
                 Times.Exactly(expectedWebSocketUrls.Count)
             );
         }
@@ -341,7 +341,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act
@@ -352,7 +352,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             // Assert
             mockWebSocketConsumerFactory.Verify(
-                x => x.Create(It.IsAny<string>(), true),
+                x => x.Create(It.IsAny<string>(), true, It.IsAny<string?>()),
                 Times.Once
             );
         }
@@ -517,7 +517,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Returns(Task.CompletedTask);
 
             mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>()))
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
                 .Returns(mockConsumer.Object);
 
             // Act

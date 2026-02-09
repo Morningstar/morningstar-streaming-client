@@ -43,9 +43,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.client = client;
         }
 
-        public IWebSocketConsumer Create(string wsUrl, bool logToFile)
+        public IWebSocketConsumer Create(string wsUrl, bool logToFile, string? purpose)
         {
-            return new WebSocketConsumer(counterLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile);
+            return new WebSocketConsumer(counterLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile, purpose);
         }
     }
 }

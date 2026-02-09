@@ -63,20 +63,23 @@ namespace Morningstar.Streaming.Client.Clients
         /// Subscribes to a WebSocket stream and signals when the connection is established.
         /// </summary>
         /// <param name="webSocketUrl">The WebSocket URL to connect to</param>
+        /// <param name="purpose">Optional purpose or description for the connection</param>
         /// <param name="onMessageAsync">Callback function to process incoming messages</param>
         /// <param name="connectedTcs">TaskCompletionSource that completes when connected (optional)</param>
         /// <param name="cancellationToken">Cancellation token</param>
         public async Task SubscribeAsync(
             string webSocketUrl,
+            string? purpose,
             Func<string, Task> onMessageAsync,
             TaskCompletionSource<bool> connectedTcs,
             CancellationToken cancellationToken = default)
         {
-            await ConnectWithRetryAsync(webSocketUrl, onMessageAsync, connectedTcs, cancellationToken);
+            await ConnectWithRetryAsync(webSocketUrl, purpose, onMessageAsync, connectedTcs, cancellationToken);
         }
 
         private async Task ConnectWithRetryAsync(
             string webSocketUrl,
+            string? purpose,
             Func<string, Task> onMessageAsync,
             TaskCompletionSource<bool> connectedTcs,
             CancellationToken cancellationToken)
@@ -90,7 +93,7 @@ namespace Morningstar.Streaming.Client.Clients
 
                 try
                 {
-                    using var ws = await ConnectWebSocketAsync(webSocketUrl, cancellationToken);
+                    using var ws = await ConnectWebSocketAsync(webSocketUrl, purpose, cancellationToken);
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
@@ -148,12 +151,16 @@ namespace Morningstar.Streaming.Client.Clients
             }
         }
 
-        private async Task<ClientWebSocket> ConnectWebSocketAsync(string url, CancellationToken cancellationToken)
+        private async Task<ClientWebSocket> ConnectWebSocketAsync(string url, string? purpose, CancellationToken cancellationToken)
         {
             var ws = new ClientWebSocket();
             ws.Options.SetRequestHeader("Authorization", await tokenProvider.CreateBearerTokenAsync());
+            if (!string.IsNullOrEmpty(purpose))
+            {
+                ws.Options.SetRequestHeader("Purpose", purpose);
+            }
 
-            logger.LogInformation("Connecting WebSocket to {Url}", url);
+            logger.LogInformation("Connecting WebSocket to {Url} with purpose {Purpose}", url, purpose);
             await ws.ConnectAsync(new Uri(url), cancellationToken);
 
             return ws;
