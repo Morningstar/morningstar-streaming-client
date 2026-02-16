@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Runtime.InteropServices;
 using Avro;
 using Avro.Generic;
 using Avro.IO;
@@ -19,11 +21,25 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
     /// </summary>
     public class AvroBinaryDeserializer : IAvroBinaryDeserializer
     {
+
+         private static class ReaderCache<TSpecificRecord>
+        where TSpecificRecord : class, ISpecificRecord, new()
+        {
+            public static Avro.Schema Schema { get; } = new TSpecificRecord().Schema;
+
+            public static ThreadLocal<SpecificDatumReader<TSpecificRecord>> Reader { get; } =
+                new(() => new SpecificDatumReader<TSpecificRecord>(Schema, Schema));
+        }
+
         private readonly IApiHelper apiHelper;
         private readonly AppConfig appConfig;
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<AvroBinaryDeserializer> logger;
         private readonly Lazy<Task<string?>> avroSchemaLazy;
+        private readonly Lazy<Task<Schema>> avroParsedSchemaLazy;
+        private readonly object genericReaderInitGate = new();
+        private volatile ThreadLocal<GenericDatumReader<GenericRecord>>? genericRecordReader;
+        private Task? genericReaderInitTask;
 
         public AvroBinaryDeserializer(
             IApiHelper apiHelper,
@@ -39,71 +55,96 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
             // Initialize lazy loading for Avro schema
             avroSchemaLazy = new Lazy<Task<string?>>(() =>
                 LoadAvroSchemaAsync(), LazyThreadSafetyMode.ExecutionAndPublication);
+
+            // Parse schema once (uses cached schema JSON from avroSchemaLazy)
+            avroParsedSchemaLazy = new Lazy<Task<Schema>>(
+                LoadParsedSchemaAsync, LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
         public async Task<T?> DeserializeAsync<T>(byte[] binaryData)
         {
-            if (binaryData.Length < 6)
-                throw new InvalidOperationException("Invalid Avro payload.");
-
-            // 1. Load schema (cached via Lazy)
-            var schemaJson = await GetAvroSchemaAsync();
-            if (string.IsNullOrWhiteSpace(schemaJson))
-                throw new InvalidOperationException("Avro schema not loaded.");
-
-            // 2. Strip Confluent header
             // byte 0   = magic byte (0)
             // byte 1-4 = schema id
             const int confluentHeaderSize = 5;
 
+            if (binaryData.Length <= confluentHeaderSize)
+            {
+                throw new InvalidOperationException("Invalid Avro payload.");
+            }
+
             if (binaryData[0] != 0x00)
+            {
                 throw new InvalidOperationException("Unknown Avro magic byte.");
+            }
 
-            var avroPayload = binaryData.AsSpan(confluentHeaderSize).ToArray();
+            // Ensure schema and reader are loaded/cached
+            var readerThreadLocal = genericRecordReader ?? await EnsureGenericRecordReaderAsync();
 
-            // 3. Parse schema
-            var schema = Schema.Parse(schemaJson);
-
-            // 4. Deserialize Avro binary
-            using var inputStream = new MemoryStream(avroPayload);
+            // Deserialize Avro binary directly from the original buffer (avoid payload copy)
+            var payloadLength = binaryData.Length - confluentHeaderSize;
+            using var inputStream = new MemoryStream(binaryData, confluentHeaderSize, payloadLength, writable: false);
             var decoder = new BinaryDecoder(inputStream);
-            var reader = new GenericDatumReader<GenericRecord>(schema, schema);
-
+            var reader = readerThreadLocal.Value!;
             var record = reader.Read(null!, decoder);
 
-            // 5. Convert to JSON
             return ConvertGenericRecordToJson<T>(record);
         }
 
-        public TSpecificRecord? DeserializeSpecific<TSpecificRecord>(byte[] binaryData)
-            where TSpecificRecord : class, ISpecificRecord, new()
+        public TSpecificRecord DeserializeSpecific<TSpecificRecord>(ReadOnlyMemory<byte> binaryData)
+           where TSpecificRecord : class, ISpecificRecord, new()
         {
             if (binaryData.Length < 6)
+            {
                 throw new InvalidOperationException("Invalid Avro payload.");
+            }
 
-            // 1. Get a SpecificRecord instance to obtain its schema
-            var specificRecord = new TSpecificRecord();
-            var schema = specificRecord.Schema;
+            if (binaryData.Span[0] != 0x00)
+            {
+                throw new InvalidOperationException("Unknown Avro magic byte.");
+            }
 
-            // 2. Strip Confluent header
+            // Strip Confluent header
             // byte 0   = magic byte (0)
             // byte 1-4 = schema id
             const int confluentHeaderSize = 5;
 
-            if (binaryData[0] != 0x00)
-                throw new InvalidOperationException("Unknown Avro magic byte.");
+            // Fast-path: avoid copying the payload as the ReadOnlyMemory is backed by a byte[].
+            if (MemoryMarshal.TryGetArray(binaryData, out var segment) && segment.Array != null)
+            {
+                var payloadOffset = segment.Offset + confluentHeaderSize;
+                var payloadLength = segment.Count - confluentHeaderSize;
+                if (payloadLength <= 0)
+                {
+                    throw new InvalidOperationException("Invalid Avro payload.");
+                }
 
-            var avroPayload = binaryData.AsSpan(confluentHeaderSize).ToArray();
+                using var inputStream = new MemoryStream(segment.Array, payloadOffset, payloadLength, writable: false);
+                var decoder = new BinaryDecoder(inputStream);
+                var reader = ReaderCache<TSpecificRecord>.Reader.Value!;
+                return reader.Read(default!, decoder);
+            }
 
-            // 3. Deserialize Avro binary using SpecificDatumReader
-            using var inputStream = new MemoryStream(avroPayload);
-            var decoder = new BinaryDecoder(inputStream);
-            var reader = new SpecificDatumReader<TSpecificRecord>(schema, schema);
+            // Fallback: rent buffer from pool and copy payload.
+            var fallbackPayloadLength = binaryData.Length - confluentHeaderSize;
+            var buffer = ArrayPool<byte>.Shared.Rent(fallbackPayloadLength);
 
-            var record = reader.Read(default!, decoder);
+            try
+            {
+                // Copy payload portion to rented buffer
+                binaryData.Slice(confluentHeaderSize).Span.CopyTo(buffer);
 
-            // 4. Return the strongly-typed record
-            return record;
+                using var inputStream = new MemoryStream(buffer, 0, fallbackPayloadLength, writable: false);
+                var decoder = new BinaryDecoder(inputStream);
+                var reader = ReaderCache<TSpecificRecord>.Reader.Value!;
+
+                var record = reader.Read(default!, decoder);
+                return record;
+            }
+            finally
+            {
+                // Return buffer to pool
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
         private static T? ConvertGenericRecordToJson<T>(GenericRecord record)
@@ -162,6 +203,51 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
         /// Gets the Avro schema, loading it lazily on first access.
         /// </summary>
         private Task<string?> GetAvroSchemaAsync() => avroSchemaLazy.Value;
+
+        private Task<Schema> GetParsedAvroSchemaAsync() => avroParsedSchemaLazy.Value;
+
+        private async Task<Schema> LoadParsedSchemaAsync()
+        {
+            var schemaJson = await GetAvroSchemaAsync();
+            if (string.IsNullOrWhiteSpace(schemaJson))
+            {
+                throw new InvalidOperationException("Avro schema not loaded.");
+            }
+
+            return Schema.Parse(schemaJson);
+        }
+
+        private async Task<ThreadLocal<GenericDatumReader<GenericRecord>>> EnsureGenericRecordReaderAsync()
+        {
+            var cached = genericRecordReader;
+            if (cached != null)
+            {
+                return cached;
+            }
+
+            Task initTask;
+            lock (genericReaderInitGate)
+            {
+                cached = genericRecordReader;
+                if (cached != null)
+                {
+                    return cached;
+                }
+
+                genericReaderInitTask ??= InitGenericRecordReaderAsync();
+                initTask = genericReaderInitTask;
+            }
+
+            await initTask;
+            return genericRecordReader!;
+        }
+
+        private async Task InitGenericRecordReaderAsync()
+        {
+            var schema = await GetParsedAvroSchemaAsync();
+            genericRecordReader = new ThreadLocal<GenericDatumReader<GenericRecord>>(
+                () => new GenericDatumReader<GenericRecord>(schema, schema));
+        }
 
         /// <summary>
         /// Loads the Avro schema from the API endpoint.
