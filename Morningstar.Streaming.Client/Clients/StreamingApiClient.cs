@@ -7,6 +7,7 @@ using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
 using System.Net.WebSockets;
 using System.Text;
+using System.Threading.Channels;
 
 namespace Morningstar.Streaming.Client.Clients
 {
@@ -174,6 +175,18 @@ namespace Morningstar.Streaming.Client.Clients
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
 
+            var messageChannel = Channel.CreateBounded<IncomingMessage>(new BoundedChannelOptions(100_000)
+            {
+                SingleReader = true,
+                SingleWriter = true
+            });
+            var processorTask = ProcessMessageChannelAsync(
+                messageChannel.Reader,
+                ws,
+                onMessageAsync,
+                () => lastHeartbeat = DateTime.UtcNow,
+                cancellationToken);
+
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, cancellationToken);
 
             while (ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
@@ -198,49 +211,80 @@ namespace Morningstar.Streaming.Client.Clients
 
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
-                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-
-                    if (message.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase))
-                    {
-                        lastHeartbeat = DateTime.UtcNow;
-                        await SendHeartbeatAckAsync(ws, cancellationToken);
-                        continue;
-                    }
-
-                    await onMessageAsync(message);
+                    var payload = buffer.AsSpan(0, result.Count).ToArray();
+                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Text, payload));
                 }
 
                 if (result.MessageType == WebSocketMessageType.Binary)
                 {
-                    try
-                    {
-                        var payload = buffer.AsSpan(0, result.Count).ToArray();
-                        var jsonMessage = await avroBinaryDeserializer.DeserializeAsync<string>(payload);
-                        if (jsonMessage == null)
-                        {
-                            logger.LogWarning("Deserialized message is null. Skipping.");
-                            continue;
-                        }
-
-                        if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase)
-                         || jsonMessage.Contains("\"EventTypes\":[\"Admin\"]", StringComparison.OrdinalIgnoreCase))
-                        {
-                            lastHeartbeat = DateTime.UtcNow;
-                            await SendHeartbeatAckAsync(ws, cancellationToken);
-                            continue;
-                        }
-
-                        await onMessageAsync(jsonMessage);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Failed to process binary Avro message. Skipping.");
-                    }
+                    var payload = buffer.AsSpan(0, result.Count).ToArray();
+                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Binary, payload));
                 }
             }
 
+            messageChannel.Writer.TryComplete();
+            await processorTask;
+
             await heartbeatTask;
         }
+
+        private async Task ProcessMessageChannelAsync(
+            ChannelReader<IncomingMessage> reader,
+            ClientWebSocket ws,
+            Func<string, Task> onMessageAsync,
+            Action updateLastHeartbeat,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await foreach (var message in reader.ReadAllAsync(cancellationToken))
+                {
+                    string? jsonMessage = null;
+
+                    if (message.MessageType == WebSocketMessageType.Text)
+                    {
+                        jsonMessage = Encoding.UTF8.GetString(message.Payload);
+                    }
+                    else if (message.MessageType == WebSocketMessageType.Binary)
+                    {
+                        try
+                        {
+                            jsonMessage = await avroBinaryDeserializer.DeserializeAsync<string>(message.Payload);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Failed to process binary Avro message. Skipping.");
+                            continue;
+                        }
+                    }
+
+                    if (jsonMessage == null)
+                    {
+                        logger.LogWarning("Deserialized message is null. Skipping.");
+                        continue;
+                    }
+
+                    if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase))
+                    {
+                        updateLastHeartbeat();
+                        await SendHeartbeatAckAsync(ws, cancellationToken);
+                        continue;
+                    }
+
+                    await onMessageAsync(jsonMessage);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Swallow cancellation
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Message processor failed.");
+            }
+        }
+
+        private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload);
 
         private async Task StartHeartbeatMonitorAsync(
             ClientWebSocket ws,
