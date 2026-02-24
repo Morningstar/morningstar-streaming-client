@@ -138,7 +138,8 @@ class Program
                     }
                 },
                 DurationSeconds = 120, // Run for 2 minutes
-                StreamingFormat = "avro" // Specify streaming format as json or avro
+                StreamingFormat = "avro", // Specify streaming format as json or avro
+                Purpose = "Streaming Client Sample" // Optional purpose string for uniquely identifying your feeds
             };
 
             logger.LogInformation("Starting Level 1 subscription...");

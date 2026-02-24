@@ -54,7 +54,7 @@ public class StreamingStepDefinitions
 
         // Setup WebSocket consumer factory to return mock consumer
         webSocketConsumerFactoryMock
-            .Setup(w => w.Create(It.IsAny<string>(), It.IsAny<bool>()))
+            .Setup(w => w.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .Returns(webSocketConsumerMock.Object);
 
         // Setup WebSocket consumer to simulate successful message receiving
@@ -192,7 +192,7 @@ public class StreamingStepDefinitions
 
         // Verify WebSocket consumer was created and is consuming
         webSocketConsumerFactoryMock.Verify(
-            w => w.Create(It.IsAny<string>(), It.IsAny<bool>()),
+            w => w.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.AtLeastOnce);
     }
 
@@ -225,7 +225,7 @@ public class StreamingStepDefinitions
 
         // Verify WebSocket consumer was created
         webSocketConsumerFactoryMock.Verify(
-            w => w.Create(It.IsAny<string>(), It.IsAny<bool>()),
+            w => w.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.AtLeastOnce);
     }
 
@@ -273,7 +273,7 @@ public class StreamingStepDefinitions
 
         // Verify that the factory was called multiple times (initial + reconnect)
         webSocketConsumerFactoryMock.Verify(
-            w => w.Create(It.IsAny<string>(), It.IsAny<bool>()),
+            w => w.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.AtLeast(2),
             "Should have created WebSocket consumers for both initial connection and reconnection");
     }

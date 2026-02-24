@@ -76,7 +76,7 @@ namespace Morningstar.Streaming.Client.Services
                 var wsUrl = $"{url}/{req.StreamingFormat}";
                 try
                 {
-                    var consumer = factory.Create(wsUrl, logMessages);
+                    var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
                     await connectedTcs.Task; 
@@ -194,9 +194,9 @@ namespace Morningstar.Streaming.Client.Services
         /// Protected method for consuming WebSocket streams.
         /// Can be used by derived classes for custom subscription implementations.
         /// </summary>
-        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, SubscriptionGroup sub, bool logToFile, TaskCompletionSource<bool> connectedTcs, CancellationToken token)
+        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, string? purpose, SubscriptionGroup sub, bool logToFile, TaskCompletionSource<bool> connectedTcs, CancellationToken token)
         {
-            var consumer = factory.Create(wsUrl, logToFile);
+            var consumer = factory.Create(wsUrl, logToFile, purpose);
             await consumer.StartConsumingAsync(connectedTcs, token);
         }
     }

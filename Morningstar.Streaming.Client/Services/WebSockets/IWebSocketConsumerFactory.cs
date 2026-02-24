@@ -10,7 +10,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         /// </summary>
         /// <param name="wsUrl">The WebSocket URL to connect to</param>
         /// <param name="logToFile">Whether to log messages to a file</param>
+        /// <param name="purpose">The purpose of the WebSocket connection</param>
         /// <returns>A new instance of IWebSocketConsumer</returns>
-        IWebSocketConsumer Create(string wsUrl, bool logToFile);
+        IWebSocketConsumer Create(string wsUrl, bool logToFile, string? purpose);
     }
 }

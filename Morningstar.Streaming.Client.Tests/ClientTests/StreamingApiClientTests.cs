@@ -170,7 +170,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var completed = new TaskCompletionSource<bool>();
 
             // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 
@@ -191,7 +191,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var completed = new TaskCompletionSource<bool>();
 
             // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 
@@ -221,7 +221,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var completed = new TaskCompletionSource<bool>();
 
             // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, onMessageAsync, completed, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 
