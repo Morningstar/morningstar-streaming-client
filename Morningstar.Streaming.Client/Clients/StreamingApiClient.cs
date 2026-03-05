@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Constants;
@@ -13,12 +14,17 @@ namespace Morningstar.Streaming.Client.Clients
 {
     public class StreamingApiClient : IStreamingApiClient
     {
+        private const int FlushIntervalMillis = 1000;
         private readonly IApiHelper apiHelper;
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
-        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(15);
+        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(30);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
+
+        private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
+
+        private readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
 
         public StreamingApiClient(
             IApiHelper apiHelper,
@@ -63,26 +69,52 @@ namespace Morningstar.Streaming.Client.Clients
         /// <summary>
         /// Subscribes to a WebSocket stream and signals when the connection is established.
         /// </summary>
+        /// <param name="subscriptionId">Unique identifier for the subscription, used for logging and telemetry</param>
         /// <param name="webSocketUrl">The WebSocket URL to connect to</param>
         /// <param name="purpose">Optional purpose or description for the connection</param>
         /// <param name="onMessageAsync">Callback function to process incoming messages</param>
-        /// <param name="connectedTcs">TaskCompletionSource that completes when connected (optional)</param>
+        /// <param name="connected">TaskCompletionSource that completes when connected</param>
         /// <param name="cancellationToken">Cancellation token</param>
-        public async Task SubscribeAsync(
+        public Task SubscribeAsync(
+            Guid subscriptionId,
             string webSocketUrl,
             string? purpose,
             Func<string, Task> onMessageAsync,
-            TaskCompletionSource<bool> connectedTcs,
+            TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken = default)
         {
-            await ConnectWithRetryAsync(webSocketUrl, purpose, onMessageAsync, connectedTcs, cancellationToken);
+            return SubscribeAsync(subscriptionId, webSocketUrl, purpose, onMessageAsync, connected, cancellationToken, null, null);
+        }
+
+        public async Task SubscribeAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            string? purpose,
+            Func<string, Task> onMessageAsync,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger)
+        {
+            await ConnectWithRetryAsync(
+                subscriptionId,
+                webSocketUrl,
+                purpose,
+                onMessageAsync,
+                connected,
+                counterLogger,
+                latencyLogger,
+                cancellationToken);
         }
 
         private async Task ConnectWithRetryAsync(
+            Guid subscriptionId,
             string webSocketUrl,
             string? purpose,
             Func<string, Task> onMessageAsync,
-            TaskCompletionSource<bool> connectedTcs,
+            TaskCompletionSource<bool> connected,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
             CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
@@ -99,12 +131,12 @@ namespace Morningstar.Streaming.Client.Clients
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
                     // Signal connection established
-                    connectedTcs.TrySetResult(true);
+                    connected.TrySetResult(true);
 
                     // Reset attempt counter after successful connection
                     attempt = 0;
 
-                    await StartReceiveLoopAsync(ws, onMessageAsync, cancellationToken);
+                    await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger);
 
                     // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
@@ -113,7 +145,7 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     // Only exit if cancellation was explicitly requested
                     logger.LogInformation(ex, "Cancellation requested. Stopping WebSocket connection.");
-                    if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
+                    if (!connected.Task.IsCompleted) connected.TrySetCanceled();
                     return;
                 }
                 catch (Exception ex)
@@ -123,8 +155,8 @@ namespace Morningstar.Streaming.Client.Clients
                     if (attempt >= maxAttempts)
                     {
                         logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
-                        if (!connectedTcs.Task.IsCompleted)
-                            connectedTcs.TrySetException(ex);
+                        if (!connected.Task.IsCompleted)
+                            connected.TrySetException(ex);
                         throw;
                     }
 
@@ -132,7 +164,7 @@ namespace Morningstar.Streaming.Client.Clients
                     if (cancellationToken.IsCancellationRequested)
                     {
                         logger.LogInformation("Cancellation requested during reconnect delay. Stopping WebSocket connection.");
-                        if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
+                        if (!connected.Task.IsCompleted) connected.TrySetCanceled();
                         return;
                     }
 
@@ -145,7 +177,7 @@ namespace Morningstar.Streaming.Client.Clients
                     {
                         // Cancellation during delay - exit gracefully
                         logger.LogInformation(delayEx, "Cancellation requested during reconnect delay. Stopping WebSocket connection.");
-                        if (!connectedTcs.Task.IsCompleted) connectedTcs.TrySetCanceled();
+                        if (!connected.Task.IsCompleted) connected.TrySetCanceled();
                         return;
                     }
                 }
@@ -168,9 +200,12 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         private async Task StartReceiveLoopAsync(
+        Guid subscriptionId,
         ClientWebSocket ws,
         Func<string, Task> onMessageAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICounterLogger? counterLogger,
+        ILatencyLogger? latencyLogger)
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
@@ -180,15 +215,30 @@ namespace Morningstar.Streaming.Client.Clients
                 SingleReader = true,
                 SingleWriter = true
             });
+
+            var telemetryChannel = Channel.CreateBounded<TelemetryItem>(new BoundedChannelOptions(100_000)
+            {
+                SingleReader = true,
+                SingleWriter = true
+            });
+
             var processorTask = ProcessMessageChannelAsync(
                 messageChannel.Reader,
                 ws,
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
+                telemetryChannel.Writer,
+                cancellationToken);
+
+            var telemetryTask = TelemetryLoopAsync(
+                subscriptionId,
+                telemetryChannel.Reader,
+                counterLogger, 
+                latencyLogger, 
                 cancellationToken);
 
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, cancellationToken);
-
+            var receivedAtMillis = 0L;
             while (ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
                 WebSocketReceiveResult result;
@@ -196,6 +246,7 @@ namespace Morningstar.Streaming.Client.Clients
                 try
                 {
                     result = await ws.ReceiveAsync(buffer, cancellationToken);
+                    receivedAtMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 }
                 catch (Exception ex)
                 {
@@ -212,20 +263,19 @@ namespace Morningstar.Streaming.Client.Clients
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
                     var payload = buffer.AsSpan(0, result.Count).ToArray();
-                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Text, payload));
+                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Text, payload, receivedAtMillis));
                 }
 
                 if (result.MessageType == WebSocketMessageType.Binary)
                 {
                     var payload = buffer.AsSpan(0, result.Count).ToArray();
-                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Binary, payload));
+                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Binary, payload, receivedAtMillis));
                 }
             }
 
             messageChannel.Writer.TryComplete();
-            await processorTask;
 
-            await heartbeatTask;
+            await Task.WhenAny(processorTask, telemetryTask, heartbeatTask);
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -233,6 +283,7 @@ namespace Morningstar.Streaming.Client.Clients
             ClientWebSocket ws,
             Func<string, Task> onMessageAsync,
             Action updateLastHeartbeat,
+            ChannelWriter<TelemetryItem> telemetryWriter,
             CancellationToken cancellationToken)
         {
             try
@@ -271,6 +322,8 @@ namespace Morningstar.Streaming.Client.Clients
                         continue;
                     }
 
+                    telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
+
                     await onMessageAsync(jsonMessage);
                 }
             }
@@ -282,9 +335,75 @@ namespace Morningstar.Streaming.Client.Clients
             {
                 logger.LogError(ex, "Message processor failed.");
             }
-        }
+        } 
 
-        private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload);
+        private async Task TelemetryLoopAsync(
+            Guid subscriptionId,
+            ChannelReader<TelemetryItem> reader,
+            ICounterLogger? counterLogger,
+            ILatencyLogger?  latencyLogger,
+            CancellationToken cancellationToken)
+        {
+            void Flush()
+            {
+                latencyLogger?.Flush();
+                counterLogger?.Flush();
+            }
+            try
+            {
+                var lastFlushTick = Environment.TickCount64;
+
+                while (await reader.WaitToReadAsync(cancellationToken))
+                {
+                    while (reader.TryRead(out var item))
+                    {
+                        
+                        //process telemetry
+                       
+                        counterLogger?.Increment(subscriptionId);
+
+                        var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(item.jsonMessage);
+
+                        if(messagePacket == null)
+                        {
+                            logger.LogWarning("Failed to deserialize message for telemetry. Message: {Message}", item.jsonMessage);
+                            continue;
+                        }
+
+                        if(messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
+                        {
+                            latencyLogger?.RecordLatency(subscriptionId, item.ReceivedAtMillis - messagePacket.PublishTime.Value);
+                        }
+
+                        var nowTick = Environment.TickCount64;
+                        if (nowTick - lastFlushTick >= FlushIntervalMillis)
+                        {
+                            Flush();
+                            lastFlushTick = nowTick;
+                        }   
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in telemetry loop for subscription {SubscriptionId}.", subscriptionId);
+            }
+            finally
+            {
+                try
+                {
+                    Flush();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Failed to flush telemetry on shutdown for subscription {SubscriptionId}.", subscriptionId);
+                }
+            }
+        }     
 
         private async Task StartHeartbeatMonitorAsync(
             ClientWebSocket ws,

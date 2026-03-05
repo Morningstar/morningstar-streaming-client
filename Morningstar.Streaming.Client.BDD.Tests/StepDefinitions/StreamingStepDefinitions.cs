@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Services;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain;

@@ -1,7 +1,6 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets
@@ -14,7 +13,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly bool logToFile;
         private readonly string? purpose;
 
-        private readonly ICounterLogger counterLogger;
+        private readonly ICounterLogger? counterLogger;
+        private readonly ILatencyLogger? latencyLogger;
         private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly ILogger eventsLogger;
         private readonly Channel<string> channel;
@@ -22,7 +22,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         public WebSocketConsumer
         (
-            ICounterLogger counterLogger,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
             IWebSocketLoggerFactory wsLoggerFactory,
             ILogger<WebSocketConsumer> logger,
             IStreamingApiClient client,
@@ -38,6 +39,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.logToFile = logToFile;
             this.purpose = purpose;
             this.counterLogger = counterLogger;
+            this.latencyLogger = latencyLogger;
             this.observableMetric = observableMetric;
 
             channel = Channel.CreateUnbounded<string>();
@@ -49,12 +51,15 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         public async Task StartConsumingAsync(TaskCompletionSource<bool> connectedTcs, CancellationToken cancellationToken = default)
         {
-            counterLogger.RegisterSubscription(topicGuid);
+            var serializationFormat = wsUrl[(wsUrl.LastIndexOf('/') + 1)..];
+            counterLogger?.RegisterSubscription(topicGuid, Guid.Empty, serializationFormat, purpose);
+            latencyLogger?.RegisterSubscription(topicGuid, serializationFormat, purpose);
             var logTask = LogFromChannelAsync(cancellationToken);
 
             try
             {
                 var subTask = client.SubscribeAsync(
+                    topicGuid,
                     wsUrl,
                     purpose,
                     async message =>
@@ -63,11 +68,12 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         {
                             logger.LogError("Failed to enqueue message into channel. Message: {Message}", message);
                         }
-                        counterLogger.Increment(topicGuid);
                         await Task.CompletedTask;
                     },
                     connectedTcs,
-                    cancellationToken);
+                    cancellationToken,
+                    counterLogger,
+                    latencyLogger);
 
                 // Wait for either task to complete
                 // SubscribeAsync should run indefinitely with retries
@@ -88,7 +94,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             finally
             {
                 channel.Writer.Complete();
-                counterLogger.UnregisterSubscription(topicGuid);
+                counterLogger?.UnregisterSubscription(topicGuid);
+                latencyLogger?.UnregisterSubscription(topicGuid);
             }
         }
 

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Counter;
+using Microsoft.Extensions.DependencyInjection;
 using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets
@@ -8,7 +8,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
     public class WebSocketConsumerFactory : IWebSocketConsumerFactory
     {
         private readonly ILogger<WebSocketConsumer> logger;
-        private readonly ICounterLogger counterLogger;
+        private readonly IServiceProvider serviceProvider;
         private readonly IWebSocketLoggerFactory wsLoggerFactory;
         private readonly IStreamingApiClient client;
         private readonly IObservableMetric<IMetric>? observableMetric;
@@ -16,14 +16,14 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         public WebSocketConsumerFactory
         (
             ILogger<WebSocketConsumer> logger,
-            ICounterLogger counterLogger,
+            IServiceProvider serviceProvider,
             IWebSocketLoggerFactory wsLoggerFactory,
             IStreamingApiClient client,
             IObservableMetric<IMetric>? observableMetric
         )
         {
             this.logger = logger;
-            this.counterLogger = counterLogger;
+            this.serviceProvider = serviceProvider;
             this.wsLoggerFactory = wsLoggerFactory;
             this.client = client;
             this.observableMetric = observableMetric;
@@ -32,20 +32,23 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         public WebSocketConsumerFactory
         (
             ILogger<WebSocketConsumer> logger,
-            ICounterLogger counterLogger,
+            IServiceProvider serviceProvider,
             IWebSocketLoggerFactory wsLoggerFactory,
             IStreamingApiClient client
         )
         {
             this.logger = logger;
-            this.counterLogger = counterLogger;
+            this.serviceProvider = serviceProvider;
             this.wsLoggerFactory = wsLoggerFactory;
             this.client = client;
         }
 
         public IWebSocketConsumer Create(string wsUrl, bool logToFile, string? purpose)
         {
-            return new WebSocketConsumer(counterLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile, purpose);
+            var counterLogger = serviceProvider.GetService<ICounterLogger>();
+            var latencyLogger = serviceProvider.GetService<ILatencyLogger>();
+
+            return new WebSocketConsumer(counterLogger, latencyLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile, purpose);
         }
     }
 }

@@ -155,6 +155,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         public async Task SubscribeAsync_WithImmediateCancellation_CompletesWithoutException()
         {
             // Arrange
+            var topicGuid = Guid.NewGuid();
             var webSocketUrl = "wss://test.com/stream";
             var messageReceived = false;
 
@@ -170,7 +171,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var completed = new TaskCompletionSource<bool>();
 
             // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(topicGuid, webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 
@@ -182,6 +183,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         public async Task SubscribeAsync_LogsConnectionAttempt_WhenConnecting()
         {
             // Arrange
+            var topicGuid = Guid.NewGuid();
             var webSocketUrl = "wss://invalid.test.example.com/stream";
             Func<string, Task> onMessageAsync = async (message) => await Task.CompletedTask;
 
@@ -190,8 +192,8 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
 
             var completed = new TaskCompletionSource<bool>();
 
-            // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
+            // Act            
+            var subscribeTask = streamingApiClient.SubscribeAsync(topicGuid, webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 
@@ -212,6 +214,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         public async Task SubscribeAsync_WithFailedConnection_RetriesAndLogsWarning()
         {
             // Arrange
+            var topicGuid = Guid.NewGuid();
             var webSocketUrl = "wss://invalid-domain-that-does-not-exist.test/stream";
             Func<string, Task> onMessageAsync = async (message) => await Task.CompletedTask;
 
@@ -221,7 +224,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var completed = new TaskCompletionSource<bool>();
 
             // Act
-            var subscribeTask = streamingApiClient.SubscribeAsync(webSocketUrl, null, onMessageAsync, completed, cts.Token);
+            var subscribeTask = streamingApiClient.SubscribeAsync(topicGuid, webSocketUrl, null, onMessageAsync, completed, cts.Token);
 
             await Task.WhenAny(completed.Task, subscribeTask);
 

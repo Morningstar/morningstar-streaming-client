@@ -1,20 +1,18 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
-using Morningstar.Streaming.Domain.Config;
-using Morningstar.Streaming.Domain.Constants;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
     public class WebSocketConsumerFactoryTests
     {
         private readonly Mock<ILogger<WebSocketConsumer>> mockLogger;
+        private readonly Mock<IServiceProvider> mockServiceProvider;
         private readonly Mock<ICounterLogger> mockCounterLogger;
+        private readonly Mock<ILatencyLogger> mockLatencyLogger;
         private readonly Mock<IWebSocketLoggerFactory> mockWsLoggerFactory;
         private readonly Mock<IStreamingApiClient> mockClient;
         private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
@@ -24,10 +22,20 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         {
             // Arrange - Initialize mocks
             mockLogger = new Mock<ILogger<WebSocketConsumer>>();
+            mockServiceProvider = new Mock<IServiceProvider>();
             mockCounterLogger = new Mock<ICounterLogger>();
+            mockLatencyLogger = new Mock<ILatencyLogger>();
             mockWsLoggerFactory = new Mock<IWebSocketLoggerFactory>();
             mockClient = new Mock<IStreamingApiClient>();
             mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
+
+            mockServiceProvider
+                .Setup(x => x.GetService(typeof(ICounterLogger)))
+                .Returns(mockCounterLogger.Object);
+
+            mockServiceProvider
+                .Setup(x => x.GetService(typeof(ILatencyLogger)))
+                .Returns(mockLatencyLogger.Object);
 
             // Setup default WebSocketLoggerFactory behavior
             var mockEventsLogger = new Mock<ILogger>();
@@ -38,7 +46,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // System Under Test
             webSocketConsumerFactory = new WebSocketConsumerFactory(
                 mockLogger.Object,
-                mockCounterLogger.Object,
+                mockServiceProvider.Object,
                 mockWsLoggerFactory.Object,
                 mockClient.Object,
                 mockObservableMetric.Object
