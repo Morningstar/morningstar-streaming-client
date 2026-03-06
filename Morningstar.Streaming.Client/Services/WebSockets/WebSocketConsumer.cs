@@ -44,8 +44,13 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
             channel = Channel.CreateUnbounded<string>();
 
-            Guid.TryParse(wsUrl.Substring(wsUrl.LastIndexOf('/') + 1), out Guid result);
-            topicGuid = result;
+            var pathSegments = wsUrl
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            var topicGuidSegment = pathSegments.Length >= 2 ? pathSegments[^2] : string.Empty;
+            Guid.TryParse(topicGuidSegment, out var topicGuidResult);
+            
+            topicGuid = topicGuidResult;
             eventsLogger = wsLoggerFactory.GetLogger(topicGuid);
         }
 

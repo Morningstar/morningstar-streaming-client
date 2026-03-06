@@ -19,7 +19,7 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
-        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromMinutes(60);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
 
         private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
@@ -372,7 +372,13 @@ namespace Morningstar.Streaming.Client.Clients
 
                         if(messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
-                            latencyLogger?.RecordLatency(subscriptionId, item.ReceivedAtMillis - messagePacket.PublishTime.Value);
+                            var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
+                            var latencyMillis = item.ReceivedAtMillis - publishTimeMillis;
+
+                            if (latencyMillis >= 0)
+                            {
+                                latencyLogger?.RecordLatency(subscriptionId, latencyMillis);
+                            }                            
                         }
 
                         var nowTick = Environment.TickCount64;
