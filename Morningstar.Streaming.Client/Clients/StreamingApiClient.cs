@@ -209,14 +209,16 @@ namespace Morningstar.Streaming.Client.Clients
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
+            using var processingCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var processingCancellationToken = processingCancellationTokenSource.Token;
 
-            var messageChannel = Channel.CreateBounded<IncomingMessage>(new BoundedChannelOptions(100_000)
+            var messageChannel = Channel.CreateUnbounded<IncomingMessage>(new UnboundedChannelOptions()
             {
                 SingleReader = true,
                 SingleWriter = true
             });
 
-            var telemetryChannel = Channel.CreateBounded<TelemetryItem>(new BoundedChannelOptions(100_000)
+            var telemetryChannel = Channel.CreateUnbounded<TelemetryItem>(new UnboundedChannelOptions()
             {
                 SingleReader = true,
                 SingleWriter = true
@@ -228,54 +230,61 @@ namespace Morningstar.Streaming.Client.Clients
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
                 telemetryChannel.Writer,
-                cancellationToken);
+                processingCancellationToken);
 
             var telemetryTask = TelemetryLoopAsync(
                 subscriptionId,
                 telemetryChannel.Reader,
                 counterLogger, 
                 latencyLogger, 
-                cancellationToken);
+                processingCancellationToken);
 
-            var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, cancellationToken);
+            var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, processingCancellationToken);
             var receivedAtMillis = 0L;
-            while (ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+            try
             {
-                WebSocketReceiveResult result;
+                while (ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+                {
+                    WebSocketReceiveResult result;
 
-                try
-                {
-                    result = await ws.ReceiveAsync(buffer, cancellationToken);
-                    receivedAtMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Receive failed, disconnecting.");
-                    break;
-                }
+                    try
+                    {
+                        result = await ws.ReceiveAsync(buffer, cancellationToken);
+                        receivedAtMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Receive failed, disconnecting.");
+                        break;
+                    }
 
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    logger.LogWarning("Server closed WebSocket.");
-                    break;
-                }
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        logger.LogWarning("Server closed WebSocket.");
+                        break;
+                    }
 
-                if (result.MessageType == WebSocketMessageType.Text)
-                {
                     var payload = buffer.AsSpan(0, result.Count).ToArray();
-                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Text, payload, receivedAtMillis));
-                }
 
-                if (result.MessageType == WebSocketMessageType.Binary)
-                {
-                    var payload = buffer.AsSpan(0, result.Count).ToArray();
-                    messageChannel.Writer.TryWrite(new IncomingMessage(WebSocketMessageType.Binary, payload, receivedAtMillis));
+                    if ((result.MessageType == WebSocketMessageType.Text || result.MessageType == WebSocketMessageType.Binary) &&
+                        !messageChannel.Writer.TryWrite(new IncomingMessage(result.MessageType, payload, receivedAtMillis)))
+                    {
+                        logger.LogWarning("Incoming message channel was completed before message enqueue for subscription {SubscriptionId}.", subscriptionId);
+                    }
                 }
             }
+            finally
+            {
+                await processingCancellationTokenSource.CancelAsync();
+                messageChannel.Writer.TryComplete();
+                telemetryChannel.Writer.TryComplete();
+                AbortWebSocket(ws);
 
-            messageChannel.Writer.TryComplete();
-
-            await Task.WhenAny(processorTask, telemetryTask, heartbeatTask);
+                await Task.WhenAll(
+                    IgnoreCancellationAsync(processorTask),
+                    IgnoreCancellationAsync(telemetryTask),
+                    IgnoreCancellationAsync(heartbeatTask));
+            }
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -335,7 +344,44 @@ namespace Morningstar.Streaming.Client.Clients
             {
                 logger.LogError(ex, "Message processor failed.");
             }
-        } 
+            finally
+            {
+                telemetryWriter.TryComplete();
+            }
+        }
+
+        private static void AbortWebSocket(ClientWebSocket ws)
+        {
+            if (ws.State == WebSocketState.Closed || ws.State == WebSocketState.Aborted)
+            {
+                return;
+            }
+
+            try
+            {
+                ws.Abort();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Socket was already disposed during shutdown.
+            }
+        }
+
+        private async Task IgnoreCancellationAsync(Task task)
+        {
+            try
+            {
+                await task;
+            }
+            catch (OperationCanceledException)
+            {
+                // Swallow cancellation
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Background task stopped while receive loop was shutting down.");
+            }
+        }
 
         private async Task TelemetryLoopAsync(
             Guid subscriptionId,
