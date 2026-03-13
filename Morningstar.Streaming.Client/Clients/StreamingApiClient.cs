@@ -19,7 +19,7 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
-        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromMinutes(60);
+        private readonly TimeSpan heartbeatTimeout = TimeSpan.FromMinutes(1);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
 
         private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
