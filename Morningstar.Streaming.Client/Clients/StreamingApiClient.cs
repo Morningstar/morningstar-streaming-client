@@ -209,8 +209,8 @@ namespace Morningstar.Streaming.Client.Clients
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
-            using var processingCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var processingCancellationToken = processingCancellationTokenSource.Token;
+            using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
 
             var messageChannel = Channel.CreateUnbounded<IncomingMessage>(new UnboundedChannelOptions()
             {
@@ -230,27 +230,31 @@ namespace Morningstar.Streaming.Client.Clients
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
                 telemetryChannel.Writer,
-                processingCancellationToken);
+                shutdownCancellationToken);
 
             var telemetryTask = TelemetryLoopAsync(
                 subscriptionId,
                 telemetryChannel.Reader,
                 counterLogger, 
                 latencyLogger, 
-                processingCancellationToken);
+                shutdownCancellationToken);
 
-            var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, processingCancellationToken);
+            var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, shutdownCancellationTokenSource, shutdownCancellationToken);
             var receivedAtMillis = 0L;
             try
             {
-                while (ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+                while (ws.State == WebSocketState.Open && !shutdownCancellationToken.IsCancellationRequested)
                 {
                     WebSocketReceiveResult result;
 
                     try
                     {
-                        result = await ws.ReceiveAsync(buffer, cancellationToken);
+                        result = await ws.ReceiveAsync(buffer, shutdownCancellationToken);
                         receivedAtMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    }
+                    catch (OperationCanceledException) when (shutdownCancellationToken.IsCancellationRequested)
+                    {
+                        break;
                     }
                     catch (Exception ex)
                     {
@@ -275,7 +279,7 @@ namespace Morningstar.Streaming.Client.Clients
             }
             finally
             {
-                await processingCancellationTokenSource.CancelAsync();
+                await shutdownCancellationTokenSource.CancelAsync();
                 messageChannel.Writer.TryComplete();
                 telemetryChannel.Writer.TryComplete();
                 AbortWebSocket(ws);
@@ -460,6 +464,7 @@ namespace Morningstar.Streaming.Client.Clients
         private async Task StartHeartbeatMonitorAsync(
             ClientWebSocket ws,
             Func<DateTime> getLastHeartbeat,
+            CancellationTokenSource shutdownCancellationTokenSource,
             CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested && ws.State == WebSocketState.Open)
@@ -468,11 +473,9 @@ namespace Morningstar.Streaming.Client.Clients
 
                 if (DateTime.UtcNow - getLastHeartbeat() > heartbeatTimeout)
                 {
-                    logger.LogWarning("Server heartbeat timeout. Closing WebSocket.");
-                    if (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
-                    {
-                        await ws.CloseAsync(WebSocketCloseStatus.EndpointUnavailable, "Heartbeat timeout", cancellationToken);
-                    }
+                    logger.LogWarning("Server heartbeat timeout. Aborting WebSocket.");
+                    await shutdownCancellationTokenSource.CancelAsync();
+                    AbortWebSocket(ws);
                     break;
                 }
             }
