@@ -1,7 +1,6 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets
@@ -14,15 +13,18 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly bool logToFile;
         private readonly string? purpose;
 
-        private readonly ICounterLogger counterLogger;
+        private readonly ICounterLogger? counterLogger;
+        private readonly ILatencyLogger? latencyLogger;
         private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly ILogger eventsLogger;
         private readonly Channel<string> channel;
         private readonly Guid topicGuid;
+        private readonly string serializationFormat;
 
         public WebSocketConsumer
         (
-            ICounterLogger counterLogger,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
             IWebSocketLoggerFactory wsLoggerFactory,
             ILogger<WebSocketConsumer> logger,
             IStreamingApiClient client,
@@ -38,43 +40,55 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.logToFile = logToFile;
             this.purpose = purpose;
             this.counterLogger = counterLogger;
+            this.latencyLogger = latencyLogger;
             this.observableMetric = observableMetric;
 
             channel = Channel.CreateUnbounded<string>();
 
-            Guid.TryParse(wsUrl.Substring(wsUrl.LastIndexOf('/') + 1), out Guid result);
-            topicGuid = result;
+            var pathSegments = wsUrl
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            var lastSegment = pathSegments.Length >= 1 ? pathSegments[^1] : string.Empty;
+            var topicGuidSegment = Guid.TryParse(lastSegment, out _) 
+                ? lastSegment 
+                : pathSegments.Length >= 2 ? pathSegments[^2] : string.Empty;
+            Guid.TryParse(topicGuidSegment, out var topicGuidResult);
+            serializationFormat = Guid.TryParse(lastSegment, out _) ? string.Empty : lastSegment;
+            
+            topicGuid = topicGuidResult;
             eventsLogger = wsLoggerFactory.GetLogger(topicGuid);
         }
 
         public async Task StartConsumingAsync(TaskCompletionSource<bool> connectedTcs, CancellationToken cancellationToken = default)
         {
-            counterLogger.RegisterSubscription(topicGuid);
+            counterLogger?.RegisterSubscription(topicGuid, Guid.Empty, serializationFormat, purpose);
+            latencyLogger?.RegisterSubscription(topicGuid, serializationFormat, purpose);
             var logTask = LogFromChannelAsync(cancellationToken);
 
             try
             {
-                var subTask = client.SubscribeAsync(
+                await client.SubscribeAsync(
+                    topicGuid,
                     wsUrl,
                     purpose,
                     async message =>
                     {
+                        counterLogger?.Increment(topicGuid);
+
                         if (!channel.Writer.TryWrite(message))
                         {
                             logger.LogError("Failed to enqueue message into channel. Message: {Message}", message);
                         }
-                        counterLogger.Increment(topicGuid);
+
                         await Task.CompletedTask;
                     },
                     connectedTcs,
                     cancellationToken);
 
-                // Wait for either task to complete
-                // SubscribeAsync should run indefinitely with retries
-                // logTask will run until cancellation or channel completion
-                await Task.WhenAny(logTask, subTask);
-
-                _ = HandleSubscriptionTaskCompletion(subTask, cancellationToken);
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
+                }
             }
             catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
@@ -82,13 +96,15 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
             catch (Exception ex)
             {
+                await RecordWebSocketDisconnectionMetric();
                 logger.LogError(ex, "WebSocket consumer failed unexpectedly.");
-                throw;
             }
             finally
             {
                 channel.Writer.Complete();
-                counterLogger.UnregisterSubscription(topicGuid);
+                await logTask;
+                counterLogger?.UnregisterSubscription(topicGuid);
+                latencyLogger?.UnregisterSubscription(topicGuid);
             }
         }
 
@@ -124,27 +140,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     { "TopicGuid", topicGuid.ToString() },
                     { "WebSocketUrl", wsUrl }
                 });
-        }
-        private async Task HandleSubscriptionTaskCompletion(Task subTask, CancellationToken cancellationToken)
-        {
-            // If subscription task faults, record disconnection metric
-            if (IsUnexpectedDisconnection(subTask, cancellationToken))
-            {
-                await RecordWebSocketDisconnectionMetric();
-            }
-
-            // If we reach here due to cancellation, that's expected
-            // If subTask completed unexpectedly, we should know about it
-            if (IsUnexpectedCompletion(subTask, cancellationToken))
-            {
-                logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
-            }
-        }
-
-        private static bool IsUnexpectedDisconnection(Task subTask, CancellationToken cancellationToken)
-            => subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
-
-        private static bool IsUnexpectedCompletion(Task subTask, CancellationToken cancellationToken)
-            => subTask.IsCompleted && !subTask.IsFaulted && !cancellationToken.IsCancellationRequested;
+        }        
     }
 }

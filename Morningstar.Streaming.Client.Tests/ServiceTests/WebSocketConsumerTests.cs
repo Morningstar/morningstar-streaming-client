@@ -2,16 +2,16 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Morningstar.Streaming.Client.Clients;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
-using Morningstar.Streaming.Domain.Constants;
+using ICounterLogger = Morningstar.Streaming.Client.Services.Telemetry.ICounterLogger;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
     public class WebSocketConsumerTests
     {
         private readonly Mock<ICounterLogger> mockCounterLogger;
+        private readonly Mock<ILatencyLogger> mockLatencyLogger;
         private readonly Mock<IWebSocketLoggerFactory> mockWsLoggerFactory;
         private readonly Mock<ILogger<WebSocketConsumer>> mockLogger;
         private readonly Mock<IStreamingApiClient> mockClient;
@@ -22,6 +22,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         {
             // Arrange - Initialize mocks
             mockCounterLogger = new Mock<ICounterLogger>();
+            mockLatencyLogger = new Mock<ILatencyLogger>();
             mockWsLoggerFactory = new Mock<IWebSocketLoggerFactory>();
             mockLogger = new Mock<ILogger<WebSocketConsumer>>();
             mockClient = new Mock<IStreamingApiClient>();
@@ -44,6 +45,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -69,6 +71,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -93,6 +96,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -117,6 +121,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -126,6 +131,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -144,7 +150,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             await consumer.StartConsumingAsync(connectedTcs, cts.Token);
 
             // Assert
-            mockCounterLogger.Verify(x => x.RegisterSubscription(guid), Times.Once);
+            mockCounterLogger.Verify(x => x.RegisterSubscription(guid, Guid.Empty, It.IsAny<string>(), It.IsAny<string?>()), Times.Once);
         }
 
         [Fact]
@@ -157,6 +163,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -166,6 +173,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -197,6 +205,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     wsUrl,
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -206,6 +215,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -226,6 +236,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             mockClient.Verify(
                 x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     $"{wsUrl}",
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -245,12 +256,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             CancellationToken capturedToken = default;
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         capturedToken = token;
                         tcs.SetResult(true);
@@ -259,6 +271,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -291,12 +304,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             Func<string, Task>? messageCallback = null;
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -305,6 +319,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -343,12 +358,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             Func<string, Task>? messageCallback = null;
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -357,6 +373,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -396,12 +413,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             Func<string, Task>? messageCallback = null;
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -410,6 +428,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -456,6 +475,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var tcs = new TaskCompletionSource<bool>();
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -468,6 +488,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -510,6 +531,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -519,6 +541,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -551,12 +574,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             Func<string, Task>? messageCallback = null;
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -565,6 +589,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -602,11 +627,12 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var callOrder = new List<string>();
 
             mockCounterLogger
-                .Setup(x => x.RegisterSubscription(guid))
+                .Setup(x => x.RegisterSubscription(guid, Guid.Empty, It.IsAny<string>(), It.IsAny<string?>()))
                 .Callback(() => callOrder.Add("Register"));
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -617,6 +643,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -649,6 +676,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -663,6 +691,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
@@ -697,6 +726,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             mockClient
                 .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
                     It.IsAny<Func<string, Task>>(),
@@ -710,6 +740,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var consumer = new WebSocketConsumer(
                 mockCounterLogger.Object,
+                mockLatencyLogger.Object,
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,

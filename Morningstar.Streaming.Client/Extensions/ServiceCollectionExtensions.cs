@@ -3,7 +3,6 @@ using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
-using Morningstar.Streaming.Client.Services.Counter;
 using Morningstar.Streaming.Client.Services.Subscriptions;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Client.Services.WebSockets;
@@ -22,7 +21,7 @@ public static class ServiceCollectionExtensions
     /// - Streaming API Client
     /// - Subscription management
     /// - WebSocket consumers
-    /// - Counter logging
+    /// - Optional telemetry hooks (register your own ICounterLogger/ILatencyLogger implementations)
     /// </summary>
     /// <param name="services">The service collection to add services to</param>
     /// <returns>The service collection for chaining</returns>
@@ -30,7 +29,6 @@ public static class ServiceCollectionExtensions
     {
         // Core application services
         services.AddSingleton<ICanaryService, CanaryService>();
-        services.AddSingleton<ICounterLogger, CounterLogger>();
         services.AddSingleton<ITokenProvider, TokenProvider>();
         services.AddSingleton<IAvroBinaryDeserializer, AvroBinaryDeserializer>();
 
@@ -46,18 +44,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWebSocketConsumerFactory, WebSocketConsumerFactory>();
         services.AddSingleton<IWebSocketLoggerFactory, WebSocketLoggerFactory>();
 
-        return services;
-    }
-
-    /// <summary>
-    /// Registers the CounterLogger as a hosted service (for applications that support IHostedService).
-    /// Optional - only needed if you want automatic counter logging in the background.
-    /// </summary>
-    /// <param name="services">The service collection to add services to</param>
-    /// <returns>The service collection for chaining</returns>
-    public static IServiceCollection AddStreamingHostedServices(this IServiceCollection services)
-    {
-        services.AddHostedService(sp => (CounterLogger)sp.GetRequiredService<ICounterLogger>());
         return services;
     }
 }

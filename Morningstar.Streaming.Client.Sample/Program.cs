@@ -63,14 +63,15 @@ class Program
                 // Register example OAuth provider for your authentication
                 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
+                // If you want to log out counters and latency, uncomment the following services. Otherwise, you can omit these or replace them with your own implementations.
+                // services.AddTransient<ICounterLogger, CounterLogger>();
+                // services.AddTransient<ILatencyLogger, LatencyLogger>();
+
                 // if you want to to observe disconnections, uncomment the following line:
                 // services.AddSingleton<IObservableMetric<IMetric>, DisconnectionCounterLogger>();
 
                 // Register all Morningstar Streaming Client services using the extension method
                 services.AddStreamingServices();
-
-                // If you want background counter logging, uncomment the following line:
-                // services.AddStreamingHostedServices();
             });
 
     /// <summary>
