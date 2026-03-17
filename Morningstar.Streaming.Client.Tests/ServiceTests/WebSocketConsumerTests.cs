@@ -262,7 +262,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         capturedToken = token;
                         tcs.SetResult(true);
@@ -310,7 +310,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -364,7 +364,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -419,7 +419,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -580,7 +580,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Func<string, Task>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>()))
-                .Callback((string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);

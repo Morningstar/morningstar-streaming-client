@@ -226,6 +226,7 @@ namespace Morningstar.Streaming.Client.Clients
             });
 
             var processorTask = ProcessMessageChannelAsync(
+                subscriptionId,
                 messageChannel.Reader,
                 ws,
                 onMessageAsync,
@@ -294,6 +295,7 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         private async Task ProcessMessageChannelAsync(
+            Guid subscriptionId,
             ChannelReader<IncomingMessage> reader,
             ClientWebSocket ws,
             Func<string, Task> onMessageAsync,
@@ -335,6 +337,7 @@ namespace Morningstar.Streaming.Client.Clients
                     {
                         updateLastHeartbeat();
                         var heartbeatAcknowledged = await TrySendHeartbeatAckAsync(
+                            subscriptionId,
                             ws,
                             shutdownCancellationTokenSource,
                             cancellationToken);
@@ -494,6 +497,7 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         private async Task<bool> TrySendHeartbeatAckAsync(
+            Guid subscriptionId,
             ClientWebSocket ws,
             CancellationTokenSource shutdownCancellationTokenSource,
             CancellationToken cancellationToken)
@@ -522,11 +526,11 @@ namespace Morningstar.Streaming.Client.Clients
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Timed out sending heartbeat acknowledgement. Aborting WebSocket.");
+                logger.LogWarning(ex, "Timed out sending heartbeat acknowledgement for subscription {SubscriptionId}. Aborting WebSocket.", subscriptionId);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send heartbeat acknowledgement. Aborting WebSocket.");
+                logger.LogWarning(ex, "Failed to send heartbeat acknowledgement for subscription {SubscriptionId}. Aborting WebSocket.", subscriptionId);
             }
 
             await shutdownCancellationTokenSource.CancelAsync();
