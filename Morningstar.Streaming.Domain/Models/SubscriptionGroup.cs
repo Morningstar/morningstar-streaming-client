@@ -7,6 +7,9 @@ namespace Morningstar.Streaming.Domain.Models
         public DateTime StartedAt { get; set; }
         public DateTime? ExpiresAt { get; set; }
         public required CancellationTokenSource CancellationTokenSource { get; set; }
+        public string? Format { get; set; }
+        public string? Purpose { get; set; }
+        
     }
 
     public class SubscriptionGroupView
@@ -15,5 +18,7 @@ namespace Morningstar.Streaming.Domain.Models
         public required List<string> WebSocketUrls { get; set; }
         public DateTime StartedAt { get; set; }
         public DateTime? ExpiresAt { get; set; }
+        public string? Format { get; set; }
+        public string? Purpose { get; set; }
     }
 }

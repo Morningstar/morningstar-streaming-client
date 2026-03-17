@@ -69,6 +69,8 @@ namespace Morningstar.Streaming.Client.Services
                 StartedAt = DateTime.UtcNow,
                 ExpiresAt = req.DurationSeconds.HasValue ? DateTime.UtcNow.AddSeconds(req.DurationSeconds.Value) : null,
                 CancellationTokenSource = streamResult.CancellationTokenSource,
+                Format = req.StreamingFormat,
+                Purpose = req.Purpose
             };
 
             foreach (var url in streamResult.WebSocketUrls)
@@ -149,7 +151,9 @@ namespace Morningstar.Streaming.Client.Services
                 SubscriptionGuid = sub.Guid,
                 StartedAt = sub.StartedAt,
                 ExpiresAt = sub.ExpiresAt,
-                ApiResponse = streamResult.ApiResponse
+                ApiResponse = streamResult.ApiResponse,
+                Format = req.StreamingFormat,
+                Purpose = req.Purpose
             };
         }
 
@@ -186,7 +190,9 @@ namespace Morningstar.Streaming.Client.Services
                 ExpiresAt = s.ExpiresAt,
                 Guid = s.Guid,
                 StartedAt = s.StartedAt,
-                WebSocketUrls = s.WebSocketUrls
+                WebSocketUrls = s.WebSocketUrls,
+                Format = s.Format,
+                Purpose = s.Purpose
             }).ToList();
         }
 

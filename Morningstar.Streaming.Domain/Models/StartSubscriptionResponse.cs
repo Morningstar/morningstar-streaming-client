@@ -6,5 +6,7 @@ namespace Morningstar.Streaming.Domain.Models
         public DateTime? StartedAt { get; set; }
         public DateTime? ExpiresAt { get; set; }
         public StreamResponse ApiResponse { get; set; } = null!;
+        public string? Format { get; set; }
+        public string? Purpose { get; set; }
     }
 }
