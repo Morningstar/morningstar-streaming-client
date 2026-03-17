@@ -15,6 +15,7 @@ namespace Morningstar.Streaming.Client.Clients
     public class StreamingApiClient : IStreamingApiClient
     {
         private const int FlushIntervalMillis = 1000;
+        private static readonly TimeSpan heartbeatAcknowledgementTimeout = TimeSpan.FromSeconds(5);
         private readonly IApiHelper apiHelper;
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
@@ -229,6 +230,7 @@ namespace Morningstar.Streaming.Client.Clients
                 ws,
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
+                shutdownCancellationTokenSource,
                 telemetryChannel.Writer,
                 shutdownCancellationToken);
 
@@ -296,6 +298,7 @@ namespace Morningstar.Streaming.Client.Clients
             ClientWebSocket ws,
             Func<string, Task> onMessageAsync,
             Action updateLastHeartbeat,
+            CancellationTokenSource shutdownCancellationTokenSource,
             ChannelWriter<TelemetryItem> telemetryWriter,
             CancellationToken cancellationToken)
         {
@@ -331,7 +334,16 @@ namespace Morningstar.Streaming.Client.Clients
                     if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase))
                     {
                         updateLastHeartbeat();
-                        await SendHeartbeatAckAsync(ws, cancellationToken);
+                        var heartbeatAcknowledged = await TrySendHeartbeatAckAsync(
+                            ws,
+                            shutdownCancellationTokenSource,
+                            cancellationToken);
+
+                        if (!heartbeatAcknowledged)
+                        {
+                            break;
+                        }
+
                         continue;
                     }
 
@@ -481,7 +493,10 @@ namespace Morningstar.Streaming.Client.Clients
             }
         }
 
-        private async Task SendHeartbeatAckAsync(ClientWebSocket ws, CancellationToken cancellationToken)
+        private async Task<bool> TrySendHeartbeatAckAsync(
+            ClientWebSocket ws,
+            CancellationTokenSource shutdownCancellationTokenSource,
+            CancellationToken cancellationToken)
         {
             var acknowledgement = new MessagePacketEnvelope
             {
@@ -492,7 +507,31 @@ namespace Morningstar.Streaming.Client.Clients
             var json = JsonConvert.SerializeObject(acknowledgement);
             var bytes = Encoding.UTF8.GetBytes(json);
 
-            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+            using var heartbeatAcknowledgementCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            heartbeatAcknowledgementCancellationTokenSource.CancelAfter(heartbeatAcknowledgementTimeout);
+
+            try
+            {
+                await ws.SendAsync(
+                    new ArraySegment<byte>(bytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    heartbeatAcknowledgementCancellationTokenSource.Token);
+
+                return true;
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(ex, "Timed out sending heartbeat acknowledgement. Aborting WebSocket.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send heartbeat acknowledgement. Aborting WebSocket.");
+            }
+
+            await shutdownCancellationTokenSource.CancelAsync();
+            AbortWebSocket(ws);
+            return false;
         }
 
     }
