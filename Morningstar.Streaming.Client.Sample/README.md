@@ -33,7 +33,7 @@ Update the `appsettings.json` file with your actual Morningstar Streaming API co
     "LogMessagesPath": "logs"
   },
   "EndpointConfig": {
-    "Level1UrlAddress": "direct-web-services/v2/streaming/level-1"
+    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
   }
 }
 ```
