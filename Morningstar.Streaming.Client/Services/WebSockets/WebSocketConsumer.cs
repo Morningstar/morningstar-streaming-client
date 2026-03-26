@@ -73,8 +73,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     purpose,
                     async message =>
                     {
-                        counterLogger?.Increment(topicGuid);
-
                         if (!channel.Writer.TryWrite(message))
                         {
                             logger.LogError("Failed to enqueue message into channel. Message: {Message}", message);
@@ -83,7 +81,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         await Task.CompletedTask;
                     },
                     connectedTcs,
-                    cancellationToken);
+                    cancellationToken,
+                    counterLogger,
+                    latencyLogger);
 
                 if (!cancellationToken.IsCancellationRequested)
                 {
