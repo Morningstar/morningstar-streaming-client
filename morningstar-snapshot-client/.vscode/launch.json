@@ -1,0 +1,23 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sample Project",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/Morningstar.Snapshot.Client.Sample/bin/Debug/net8.0/Morningstar.Snapshot.Client.Sample.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/Morningstar.Snapshot.Client.Sample",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "enableSourceLink": true,
+      "requireExactSource": false,
+      "sourceLanguages": ["csharp"]
+    }
+  ]
+}
