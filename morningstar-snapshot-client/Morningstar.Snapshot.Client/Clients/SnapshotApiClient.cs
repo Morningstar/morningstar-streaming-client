@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Morningstar.Snapshot.Client.Helpers;
 using Morningstar.Snapshot.Client.Services.TokenProvider;
 using Morningstar.Snapshot.Domain;
-using System.Net.WebSockets;
 
 namespace Morningstar.Snapshot.Client.Clients;
 
@@ -11,10 +10,6 @@ public class SnapshotApiClient : ISnapshotApiClient
     private readonly IApiHelper apiHelper;
     private readonly ITokenProvider tokenProvider;
     private readonly ILogger<SnapshotApiClient> logger;
-
-    private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
-
-    private readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
 
     public SnapshotApiClient(
         IApiHelper apiHelper,
@@ -31,8 +26,8 @@ public class SnapshotApiClient : ISnapshotApiClient
         {
             var headers = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>("Authorization", await tokenProvider.CreateBearerTokenAsync()),
-                new KeyValuePair<string, string>("Accept", "application/json")
+                new("Authorization", await tokenProvider.CreateBearerTokenAsync()),
+                new("Accept", "application/json")
             };
 
             return await apiHelper.ProcessRequestAsync<SnapshotResponse>(

@@ -9,11 +9,10 @@ namespace Morningstar.Snapshot.Domain;
 public class SnapshotResponse
 {
     [property: DefaultValue(200)]
-    // public int StatusCode { get; set; }
+    public HttpStatusCode StatusCode { get; set; }
     public DataContainer Data { get; set; } = null!;
     public MetaData MetaData { get; set; } = null!;
 
-    public HttpStatusCode StatusCode { get; set; }
     public string? Schema { get; set; }
 }
 

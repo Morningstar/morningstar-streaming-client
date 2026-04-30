@@ -37,20 +37,14 @@ public class SnapshotFactory : ISnapshotRequestFactory
     /// </summary>
     protected virtual async Task<SnapshotRequestResult> CreateInternalAsync<TReq>(
         TReq req,
-        Func<TReq, Task<SnapshotResponse>> streamApiCallAsync)
+        Func<TReq, Task<SnapshotResponse>> snapshotApiCallAsync)
         where TReq : class
     {
-        var response = await streamApiCallAsync(req);
-
-        // var cts = (req as dynamic).DurationSeconds != null
-        //     ? new CancellationTokenSource(TimeSpan.FromSeconds((int)(req as dynamic).DurationSeconds))
-        //     : new CancellationTokenSource();
-
+        var response = await snapshotApiCallAsync(req);
 
         return new SnapshotRequestResult
         {
-            ApiResponse = response!,
-            CancellationTokenSource = null // Placeholder for potential future cancellation support,
+            ApiResponse = response!
         };
     }
 }

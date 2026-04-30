@@ -10,7 +10,7 @@ namespace Morningstar.Snapshot.Domain.Models;
 public class IMessageConverter : JsonConverter
 {
     // Mapping of property names to their corresponding message types
-    private static readonly Dictionary<string, Type> PropertyTypeMap = new()
+    private static readonly Dictionary<string, Type> PropertyTypeMap = new(StringComparer.OrdinalIgnoreCase)
     {
         // LastPriceMessage properties
         { "price", typeof(LastPriceMessage) },
@@ -22,6 +22,12 @@ public class IMessageConverter : JsonConverter
         { "bidPrice", typeof(TopOfBookMessage) },
         { "askSize", typeof(TopOfBookMessage) },
         { "bidSize", typeof(TopOfBookMessage) },
+        { "askConditionFlag", typeof(TopOfBookMessage) },
+        { "askExchange", typeof(TopOfBookMessage) },
+        { "bidConditionFlag", typeof(TopOfBookMessage) },
+        { "bidExchange", typeof(TopOfBookMessage) },
+
+        // MarketByPriceMessage properties
         { "rankLevel", typeof(MarketByPriceMessage) },
         { "side", typeof(MarketByPriceMessage) },
         { "volume", typeof(MarketByPriceMessage) },
@@ -47,12 +53,6 @@ public class IMessageConverter : JsonConverter
         { "closePrice", typeof(CloseMessage) },
         { "closePriceDateTime", typeof(CloseMessage) },
         { "unadjustedPreviousClosePrice", typeof(CloseMessage) },
-
-        // TopOfBookMessage extended properties
-        { "askConditionFlag", typeof(TopOfBookMessage) },
-        { "askExchange", typeof(TopOfBookMessage) },
-        { "bidConditionFlag", typeof(TopOfBookMessage) },
-        { "bidExchange", typeof(TopOfBookMessage) },
 
         // AggregateSummaryMessage properties
         { "tradeCount", typeof(AggregateSummaryMessage) },
@@ -101,10 +101,9 @@ public class IMessageConverter : JsonConverter
         { "priceCalculationDateTime", typeof(IndexTickMessage) },
     };
 
-    public override bool CanConvert(Type objectType)
-    {
-        return objectType == typeof(IMessage);
-    }
+    public override bool CanConvert(Type objectType) => objectType == typeof(IMessage);
+
+    public override bool CanWrite => false;
 
     public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
     {
@@ -137,27 +136,17 @@ public class IMessageConverter : JsonConverter
         if (jObject == null || jObject.Count == 0)
             return null;
 
-        // Get all property names from the JSON object (case-insensitive)
-        var properties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var prop in jObject.Properties())
-        {
-            properties.Add(prop.Name);
-        }
-
-        // Score each potential type based on matching properties
         var typeScores = new Dictionary<Type, int>();
 
-        foreach (var property in properties)
+        foreach (var prop in jObject.Properties())
         {
-            if (PropertyTypeMap.TryGetValue(property.ToLower(), out var type))
+            if (PropertyTypeMap.TryGetValue(prop.Name, out var type))
             {
-                if (!typeScores.ContainsKey(type))
-                    typeScores[type] = 0;
-                typeScores[type]++;
+                typeScores.TryGetValue(type, out var score);
+                typeScores[type] = score + 1;
             }
         }
 
-        // Return the type with the highest score
         if (typeScores.Count > 0)
         {
             var bestMatch = typeScores.OrderByDescending(x => x.Value).First();

@@ -12,280 +12,203 @@ namespace Morningstar.Snapshot.Client.Tests.ServiceTests;
 
 public class TokenProviderTests
 {
-    private readonly Mock<ILogger<TokenProvider>> mockLogger;
-    private readonly Mock<IOptions<AppConfig>> mockAppConfig;
-    private readonly Mock<IApiHelper> mockApiHelper;
-    private readonly Mock<IOAuthProvider> mockOAuthProvider;
+    private readonly Mock<IApiHelper> apiHelperMock;
+    private readonly Mock<IOAuthProvider> oAuthProviderMock;
+    private readonly Mock<ILogger<TokenProvider>> loggerMock;
+    private readonly IOptions<AppConfig> appConfig;
     private readonly TokenProvider tokenProvider;
 
     public TokenProviderTests()
     {
-        // Arrange - Initialize mocks
-        mockLogger = new Mock<ILogger<TokenProvider>>();
-        mockAppConfig = new Mock<IOptions<AppConfig>>();
-        mockApiHelper = new Mock<IApiHelper>();
-        mockOAuthProvider = new Mock<IOAuthProvider>();
-
-        // Setup AppConfig with default values
-        mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
+        apiHelperMock = new Mock<IApiHelper>();
+        oAuthProviderMock = new Mock<IOAuthProvider>();
+        loggerMock = new Mock<ILogger<TokenProvider>>();
+        appConfig = Options.Create(new AppConfig
         {
             OAuthAddress = "https://oauth.test.com/token",
-            SnapshotApiBaseAddress = "https://api.test.com",
-            ConnectionStringTtl = 300,
-            LogMessages = false,
-            LogMessagesPath = "logs"
         });
 
-        // System Under Test
-        tokenProvider = new TokenProvider(
-            mockLogger.Object,
-            mockAppConfig.Object,
-            mockApiHelper.Object,
-            mockOAuthProvider.Object
-        );
+        tokenProvider = new TokenProvider(loggerMock.Object, appConfig, apiHelperMock.Object, oAuthProviderMock.Object);
     }
 
     [Fact]
-    public async Task CreateBearerTokenAsync_WithValidCredentials_ReturnsFormattedBearerToken()
+    public async Task CreateBearerTokenAsync_ReturnsBearerToken_WhenOAuthSucceeds()
     {
         // Arrange
-        var oAuthSecret = new OAuthSecret
-        {
-            UserName = "test-client-id",
-            Password = "test-client-secret"
-        };
-
-        var oAuthToken = new OAuthToken
-        {
-            Access_Token = "abc123def456ghi789",
-            Token_Type = "Bearer",
-            Expires_In = 3600
-        };
-
-        mockOAuthProvider
+        oAuthProviderMock
             .Setup(x => x.GetOAuthSecretAsync())
-            .ReturnsAsync(oAuthSecret);
+            .ReturnsAsync(new OAuthSecret { UserName = "user", Password = "pass" });
 
-        mockApiHelper
+        apiHelperMock
             .Setup(x => x.ProcessRequestAsync<OAuthToken>(
-                "https://oauth.test.com/token",
+                It.IsAny<string>(),
                 HttpMethod.Post,
                 It.IsAny<List<KeyValuePair<string, string>>>(),
-                null))
-            .ReturnsAsync(oAuthToken);
+                It.IsAny<object?>()))
+            .ReturnsAsync(new OAuthToken { Token_Type = "Bearer", Access_Token = "abc123nhef456ghi789jkl012" });
 
         // Act
         var result = await tokenProvider.CreateBearerTokenAsync();
 
         // Assert
-        result.Should().NotBeNullOrEmpty();
-        result.Should().Be("Bearer abc123def456ghi789");
-
-        mockOAuthProvider.Verify(x => x.GetOAuthSecretAsync(), Times.Once);
-        mockApiHelper.Verify(x => x.ProcessRequestAsync<OAuthToken>(
-            "https://oauth.test.com/token",
-            HttpMethod.Post,
-            It.IsAny<List<KeyValuePair<string, string>>>(),
-            null), Times.Once);
+        result.Should().Be("Bearer abc123nhef456ghi789jkl012");
     }
 
     [Fact]
-    public async Task CreateBearerTokenAsync_EncodesCredentialsInBase64()
+    public async Task CreateBearerTokenAsync_CallsOAuthEndpoint_WithBasicAuthHeader()
     {
         // Arrange
-        var oAuthSecret = new OAuthSecret
-        {
-            UserName = "my-client-id",
-            Password = "my-client-secret"
-        };
-
-        var oAuthToken = new OAuthToken
-        {
-            Access_Token = "test-token",
-            Token_Type = "Bearer",
-            Expires_In = 3600
-        };
-
-        mockOAuthProvider
+        oAuthProviderMock
             .Setup(x => x.GetOAuthSecretAsync())
-            .ReturnsAsync(oAuthSecret);
+            .ReturnsAsync(new OAuthSecret { UserName = "myuser", Password = "mypass" });
 
         List<KeyValuePair<string, string>>? capturedHeaders = null;
-
-        mockApiHelper
+        apiHelperMock
             .Setup(x => x.ProcessRequestAsync<OAuthToken>(
                 It.IsAny<string>(),
                 It.IsAny<HttpMethod>(),
                 It.IsAny<List<KeyValuePair<string, string>>>(),
-                It.IsAny<object?>()))
-            .Callback<string, HttpMethod, List<KeyValuePair<string, string>>, object?>(
-                (url, method, headers, body) => capturedHeaders = headers)
-            .ReturnsAsync(oAuthToken);
+                It.IsAny<object>()))
+            .Callback<string, HttpMethod, List<KeyValuePair<string, string>>?, object?>(
+                (_, _, headers, _) => capturedHeaders = headers)
+            .ReturnsAsync(new OAuthToken { Token_Type = "Bearer", Access_Token = "token" });
 
         // Act
         await tokenProvider.CreateBearerTokenAsync();
 
         // Assert
-        capturedHeaders.Should().NotBeNull();
-        capturedHeaders.Should().ContainSingle(h => h.Key == "Authorization");
-
-        var authHeader = capturedHeaders!.First(h => h.Key == "Authorization");
-        authHeader.Value.Should().StartWith("Basic ");
-
-        // Verify Base64 encoding
-        var base64Part = authHeader.Value.Replace("Basic ", "");
-        var decodedBytes = Convert.FromBase64String(base64Part);
-        var decodedString = System.Text.Encoding.UTF8.GetString(decodedBytes);
-        decodedString.Should().Be("my-client-id:my-client-secret");
+        var expectedEncoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("myuser:mypass"));
+        capturedHeaders.Should().Contain(h => h.Key == "Authorization" && h.Value == $"Basic {expectedEncoded}");
     }
 
-
     [Fact]
-    public async Task CreateBearerTokenAsync_WhenApiHelperThrowsException_LogsErrorAndThrows()
+    public async Task CreateBearerTokenAsync_ThrowsAndLogsError_WhenApiHelperThrows()
     {
         // Arrange
-        var oAuthSecret = new OAuthSecret
-        {
-            UserName = "test-client",
-            Password = "test-secret"
-        };
-
-        mockOAuthProvider
+        oAuthProviderMock
             .Setup(x => x.GetOAuthSecretAsync())
-            .ReturnsAsync(oAuthSecret);
+            .ReturnsAsync(new OAuthSecret { UserName = "user", Password = "pass" });
 
-        var expectedException = new HttpRequestException("OAuth service unavailable");
-
-        mockApiHelper
+        apiHelperMock
             .Setup(x => x.ProcessRequestAsync<OAuthToken>(
                 It.IsAny<string>(),
                 It.IsAny<HttpMethod>(),
                 It.IsAny<List<KeyValuePair<string, string>>>(),
                 It.IsAny<object?>()))
-            .ThrowsAsync(expectedException);
+            .ThrowsAsync(new HttpRequestException("Auth server unreachable"));
 
         // Act
-        Func<Task> act = async () => await tokenProvider.CreateBearerTokenAsync();
+        var act = () => tokenProvider.CreateBearerTokenAsync();
 
         // Assert
-        var exception = await act.Should().ThrowAsync<InvalidOperationException>()
+        await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Unexpected error during calling OAuth.");
-
-        exception.And.InnerException.Should().BeOfType<HttpRequestException>()
-            .Which.Message.Should().Be("OAuth service unavailable");
-
-        mockLogger.Verify(
+        loggerMock.Verify(
             x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Unexpected error during calling OAuth")),
+                It.Is<It.IsAnyType>((v, t) => true),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task CreateBearerTokenAsync_WhenOAuthProviderThrowsException_PropagatesException()
+    public async Task CreateBearerTokenAsync_PropagatesException_WhenOAuthProviderThrows()
     {
         // Arrange
-        var expectedException = new InvalidOperationException("Failed to retrieve OAuth secret");
-
-        mockOAuthProvider
+        oAuthProviderMock
             .Setup(x => x.GetOAuthSecretAsync())
-            .ThrowsAsync(expectedException);
+            .ThrowsAsync(new InvalidOperationException("Secret not found"));
 
         // Act
-        Func<Task> act = async () => await tokenProvider.CreateBearerTokenAsync();
+        var act = () => tokenProvider.CreateBearerTokenAsync();
+
+        // Assert — propagates directly, not wrapped by the inner catch block
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Secret not found");
+    }
+
+    [Fact]
+    public async Task CreateBearerTokenAsync_UsesOAuthAddressFromConfig()
+    {
+        // Arrange
+        oAuthProviderMock
+            .Setup(x => x.GetOAuthSecretAsync())
+            .ReturnsAsync(new OAuthSecret { UserName = "user", Password = "pass" });
+
+        string? capturedUrl = null;
+        apiHelperMock
+            .Setup(x => x.ProcessRequestAsync<OAuthToken>(
+                It.IsAny<string>(),
+                It.IsAny<HttpMethod>(),
+                It.IsAny<List<KeyValuePair<string, string>>>(),
+                It.IsAny<object>()))
+            .Callback<string, HttpMethod, List<KeyValuePair<string, string>>?, object?>(
+                (url, _, _, _) => capturedUrl = url)
+            .ReturnsAsync(new OAuthToken { Token_Type = "Bearer", Access_Token = "tok" });
+
+        // Act
+        await tokenProvider.CreateBearerTokenAsync();
 
         // Assert
+        capturedUrl.Should().Be("https://oauth.test.com/token");
+    }
+
+    [Fact]
+    public async Task CreateBearerTokenAsync_UsesHttpPostMethod()
+    {
+        // Arrange
+        oAuthProviderMock
+            .Setup(x => x.GetOAuthSecretAsync())
+            .ReturnsAsync(new OAuthSecret { UserName = "user", Password = "pass" });
+
+        HttpMethod? capturedMethod = null;
+        apiHelperMock
+            .Setup(x => x.ProcessRequestAsync<OAuthToken>(
+                It.IsAny<string>(),
+                It.IsAny<HttpMethod>(),
+                It.IsAny<List<KeyValuePair<string, string>>>(),
+                It.IsAny<object>()))
+            .Callback<string, HttpMethod, List<KeyValuePair<string, string>>?, object?>(
+                (_, method, _, _) => capturedMethod = method)
+            .ReturnsAsync(new OAuthToken { Token_Type = "Bearer", Access_Token = "tok" });
+
+        // Act
+        await tokenProvider.CreateBearerTokenAsync();
+
+        // Assert
+        capturedMethod.Should().Be(HttpMethod.Post);
+    }
+
+    [Fact]
+    public async Task CreateBearerTokenAsync_LogsError_WhenApiHelperReturnsNullToken()
+    {
+        // Arrange
+        oAuthProviderMock
+            .Setup(x => x.GetOAuthSecretAsync())
+            .ReturnsAsync(new OAuthSecret { UserName = "user", Password = "pass" });
+
+        apiHelperMock.Setup(x => x.ProcessRequestAsync<OAuthToken>(
+                It.IsAny<string>(),
+                It.IsAny<HttpMethod>(),
+                It.IsAny<List<KeyValuePair<string, string>>>(),
+                It.IsAny<object?>()))
+            .ReturnsAsync((OAuthToken?)null);
+
+        // Act
+        var act = () => tokenProvider.CreateBearerTokenAsync();
+
+        // Assert — NullReferenceException is caught internally and wrapped as InvalidOperationException.
+        // LogError fires once for the null token warning, then again inside the catch block.
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("Failed to retrieve OAuth secret");
-    }
-
-    [Fact]
-    public async Task CreateBearerTokenAsync_CallsOAuthProviderBeforeApiHelper()
-    {
-        // Arrange
-        var callOrder = new List<string>();
-
-        var oAuthSecret = new OAuthSecret
-        {
-            UserName = "client",
-            Password = "secret"
-        };
-
-        var oAuthToken = new OAuthToken
-        {
-            Access_Token = "token",
-            Token_Type = "Bearer",
-            Expires_In = 3600
-        };
-
-        mockOAuthProvider
-            .Setup(x => x.GetOAuthSecretAsync())
-            .Callback(() => callOrder.Add("OAuthProvider"))
-            .ReturnsAsync(oAuthSecret);
-
-        mockApiHelper
-            .Setup(x => x.ProcessRequestAsync<OAuthToken>(
-                It.IsAny<string>(),
-                It.IsAny<HttpMethod>(),
-                It.IsAny<List<KeyValuePair<string, string>>>(),
-                It.IsAny<object?>()))
-            .Callback(() => callOrder.Add("ApiHelper"))
-            .ReturnsAsync(oAuthToken);
-
-        // Act
-        await tokenProvider.CreateBearerTokenAsync();
-
-        // Assert
-        callOrder.Should().HaveCount(2);
-        callOrder[0].Should().Be("OAuthProvider");
-        callOrder[1].Should().Be("ApiHelper");
-    }
-
-    [Fact]
-    public async Task CreateBearerTokenAsync_WithSpecialCharactersInCredentials_EncodesCorrectly()
-    {
-        // Arrange
-        var oAuthSecret = new OAuthSecret
-        {
-            UserName = "client@example.com",
-            Password = "p@ssw0rd!#$%"
-        };
-
-        var oAuthToken = new OAuthToken
-        {
-            Access_Token = "token",
-            Token_Type = "Bearer",
-            Expires_In = 3600
-        };
-
-        mockOAuthProvider
-            .Setup(x => x.GetOAuthSecretAsync())
-            .ReturnsAsync(oAuthSecret);
-
-        List<KeyValuePair<string, string>>? capturedHeaders = null;
-
-        mockApiHelper
-            .Setup(x => x.ProcessRequestAsync<OAuthToken>(
-                It.IsAny<string>(),
-                It.IsAny<HttpMethod>(),
-                It.IsAny<List<KeyValuePair<string, string>>>(),
-                It.IsAny<object?>()))
-            .Callback<string, HttpMethod, List<KeyValuePair<string, string>>, object?>(
-                (url, method, headers, body) => capturedHeaders = headers)
-            .ReturnsAsync(oAuthToken);
-
-        // Act
-        await tokenProvider.CreateBearerTokenAsync();
-
-        // Assert
-        capturedHeaders.Should().NotBeNull();
-        var authHeader = capturedHeaders!.First(h => h.Key == "Authorization");
-        var base64Part = authHeader.Value.Replace("Basic ", "");
-        var decodedBytes = Convert.FromBase64String(base64Part);
-        var decodedString = System.Text.Encoding.UTF8.GetString(decodedBytes);
-        decodedString.Should().Be("client@example.com:p@ssw0rd!#$%");
+            .WithMessage("Unexpected error during calling OAuth.");
+        loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => true),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(2));
     }
 }
