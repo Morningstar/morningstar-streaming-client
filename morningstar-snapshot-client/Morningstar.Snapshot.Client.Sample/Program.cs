@@ -31,11 +31,9 @@ class Program
         Console.WriteLine("Morningstar Snapshot Client - Sample Application");
         Console.WriteLine("=================================================");
 
-        // Build the host with dependency injection and configuration
         var host = CreateHostBuilder(args).Build();
         await host.StartAsync();
 
-        // Run the example
         await RunExampleAsync(host.Services);
 
         Console.WriteLine("Press any key to exit...");
@@ -51,7 +49,7 @@ class Program
                 .ReadFrom.Configuration(context.Configuration)
                 .Enrich.FromLogContext()
                 .WriteTo.Console()
-                .WriteTo.File("logs/canary-console-.txt", rollingInterval: RollingInterval.Day))
+                .WriteTo.File("logs/snapshot-console-.txt", rollingInterval: RollingInterval.Day))
             .ConfigureServices((context, services) =>
             {
                 // Register configuration sections
@@ -60,7 +58,6 @@ class Program
 
                 // Register example OAuth provider for your authentication
                 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
-
 
                 // Register all Morningstar Snapshot Client services using the extension method
                 services.AddSnapshotServices();

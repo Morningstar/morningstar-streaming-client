@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Morningstar.Snapshot.Client.Services.Snapshot;
 using Morningstar.Snapshot.Client.Services.Subscriptions;
 using Morningstar.Snapshot.Domain;
-using Morningstar.Snapshot.Domain.Config;
 using Morningstar.Snapshot.Domain.Contracts;
 using System.Net;
 
@@ -16,16 +14,13 @@ public class SnapshotService : ISnapshotService
 {
     protected readonly ISnapshotRequestFactory snapshotRequestFactory;
     protected readonly ILogger logger;
-    protected readonly bool logMessages;
 
     public SnapshotService(
         ISnapshotRequestFactory snapshotRequestFactory,
-        ILogger<SnapshotService> logger,
-        IOptions<AppConfig> appConfig)
+        ILogger<SnapshotService> logger)
     {
         this.snapshotRequestFactory = snapshotRequestFactory;
         this.logger = logger;
-        logMessages = appConfig.Value.LogMessages;
     }
     public Task<SnapshotResponse> RequestSnapshotAsync(SnapshotRequest request) =>
         StartRequestSnapshotAsync(request, snapshotRequestFactory.CreateRequestAsync);
@@ -38,11 +33,7 @@ public class SnapshotService : ISnapshotService
     {
         var snapshotResult = await createFunc(req);
 
-        if (snapshotResult.ApiResponse.StatusCode != HttpStatusCode.OK)
-        {
-            // logger.LogError("Snapshot request failed with status code {StatusCode} and message: {Message}", snapshotResult.ApiResponse.StatusCode, snapshotResult.ApiResponse.Message);
-        }
-        else
+        if (snapshotResult.ApiResponse.StatusCode == HttpStatusCode.OK)
         {
             logger.LogInformation("Snapshot request succeeded with status code {StatusCode}", snapshotResult.ApiResponse.StatusCode);
         }
