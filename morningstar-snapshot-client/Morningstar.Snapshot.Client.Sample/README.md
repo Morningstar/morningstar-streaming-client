@@ -1,39 +1,39 @@
-# Morningstar Streaming Client - Sample Application
+# Morningstar Snapshot Client - Sample Application
 
-This is a complete working example demonstrating how to use the **Morningstar.Snapshot.Client** and **Morningstar.Snapshot.Domain** libraries in a standalone console application.
+This sample demonstrates how to use the `Morningstar.Snapshot.Client` and `Morningstar.Snapshot.Domain` libraries in a small console application to request on-demand snapshot data from Morningstar APIs.
 
 ## What This Example Demonstrates
 
 - ✅ Setting up dependency injection in a console app
 - ✅ Configuring services using `appsettings.json`
-- ✅ Registering Morningstar Streaming Client services
-- ✅ Working with the `ICanaryService` interface
-- ✅ Creating and managing Level 1 subscriptions
+- ✅ Registering Snapshot client services with the DI container
+- ✅ Using an `IOAuthProvider` to supply credentials and `ITokenProvider` to obtain bearer tokens
+- ✅ Requesting snapshot data and reading `SnapshotResponse`
 - ✅ Proper logging with Serilog
-- ✅ Error handling best practices
+- ✅ Error handling and cancellation best practices
 
 ## Prerequisites
 
 - .NET 8.0 SDK or later
-- Valid Morningstar Streaming API credentials and access token
-- Configured `appsettings.json` with your API endpoints
+- Valid Morningstar API credentials and access to the Snapshot endpoints
+- Configured `appsettings.json` with API and endpoint configuration
 
 ## Getting Started
 
-### 1. Configure appsettings.json
+### 1. Configure `appsettings.json`
 
-Update the `appsettings.json` file with your actual Morningstar Streaming API configuration:
+Update the `appsettings.json` file with your Snapshot API configuration. Example keys used by the sample:
 
 ```json
 {
   "AppConfig": {
-    "StreamingApiBaseAddress": "https://streaming.morningstar.com",
+    "SnapshotApiBaseAddress": "https://snapshot.morningstar.com",
     "OAuthAddress": "https://www.us-api.morningstar.com/token/oauth/",
     "LogMessages": false,
     "LogMessagesPath": "logs"
   },
   "EndpointConfig": {
-    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
+    "Level1UrlAddress": "direct-web-services/snapshot/v1/level-1"
   }
 }
 ```
@@ -50,209 +50,136 @@ dotnet build
 dotnet run
 ```
 
-### 4. How these services interact with our Streaming Api
+### 4. How these services interact with the Snapshot API
 
-The Morningstar Streaming Client library provides a layered architecture that simplifies working with real-time market data streams.
+The Morningstar Snapshot client uses a simple layered architecture to perform one‑off snapshot requests and surface parsed results.
 
 #### Architecture Overview
 
 ```
-┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐      ┌──────────────┐
-│   Your App  │ ───> │  CanaryService   │ ───> │ StreamingApi    │ ───> │  WebSocket   │
-│             │      │                  │      │     Client      │      │  Connection  │
-└─────────────┘      └──────────────────┘      └─────────────────┘      └──────────────┘
+┌─────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   Your App  │──> │ SnapshotService  │──> │SnapshotFactory  │──> │SnapshotApiClient │──> │  Snapshot API    │
+│             │    │ (orchestration)  │    │ (URL building)  │    │ (HTTP + auth)    │    │ (HTTP endpoints) │
+└─────────────┘    └──────────────────┘    └─────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
 #### Workflow
 
-**1. Request a Subscription**
-- You define what data you want (securities, event types, duration)
-- Submit the request through the Canary service
+1. Build a snapshot request
+  - Describe the investments/identifiers you need (for example, `PerformanceId`, `Ticker`)
+  - Configure any request options such as fields, locales, or data variants required by your use case
 
-**2. Stream Creation**
-- The service authenticates your request using OAuth credentials
-- Registers your subscription with the Streaming API
-- Receives connection details for real-time data delivery
+2. Configure authentication
+  - Implement `IOAuthProvider` to supply your credentials
+  - `ITokenProvider` is wired internally and called automatically by `SnapshotApiClient` on each request
 
-**3. Real-Time Data Delivery**
-- WebSocket connection is automatically established and maintained
-- Market data events flow continuously to your application
-- Connection health is monitored with automatic heartbeat handling
+3. Execute the snapshot request
+  - Call `snapshotService.RequestSnapshotAsync(request)` with your `SnapshotRequest`
+  - Authentication is handled internally — `SnapshotApiClient` fetches the bearer token via `ITokenProvider` on each call
+  - Handle exceptions as appropriate
 
-**4. Automatic Reliability**
-- Failed connections are retried automatically with exponential backoff
-- Successful reconnections reset retry counters for long-running streams
-- Graceful shutdown when you stop a subscription or on cancellation
-
-**5. Subscription Lifecycle**
-- Track all active subscriptions
-- Stop individual or all subscriptions as needed
-- Automatic cleanup of resources and connections
+4. Inspect and process results
+  - Check `response.StatusCode == HttpStatusCode.OK` for success
+  - Read `response.Data.Realtime` or `response.Data.Delayed` for instrument event data
+  - Check `response.MetaData.Messages` for any warnings (e.g. unrecognised investment IDs)
 
 #### Key Components
 
 | Component | Responsibility |
-|---------|---------|
-| **Canary Service** | High-level API for managing subscription lifecycle |
-| **Streaming API Client** | Communicates with Morningstar API endpoints |
-| **WebSocket Connection** | Maintains persistent connection for real-time data |
-| **Token Provider** | Handles OAuth authentication and token management |
-| **OAuth Provider** | Supplies your API credentials securely |
+|-----------|----------------|
+| `SnapshotService` | High-level API used by your application to request snapshot data |
+| `SnapshotApiClient` | Low-level HTTP client that attaches the bearer token, serializes the request, and returns the raw `SnapshotResponse` |
+| `SnapshotFactory` | Constructs the endpoint URL from `AppConfig` and `EndpointConfig`, then delegates to `SnapshotApiClient` |
+| `ITokenProvider` | Fetches a bearer token from the OAuth endpoint on each request via `IOAuthProvider` credentials |
+| `IOAuthProvider` | Supplies credentials to the token provider (sample `ExampleOAuthProvider`) |
 
 #### What the Library Handles for You
 
-- ✅ **Authentication**: Automatic OAuth token fetching, caching, and refresh
-- ✅ **Connection Management**: Establishes and maintains WebSocket connections
-- ✅ **Reliability**: Automatic reconnection with configurable retry logic
-- ✅ **Health Monitoring**: Server heartbeat detection and timeout handling
-- ✅ **Resource Cleanup**: Proper disposal of connections and background tasks
-
-You focus on defining what data you need and how to process it—the library handles the complexity of maintaining reliable, authenticated, real-time connections.
-
-#### OpenAPI Specification
-**Full API documentation** available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
+- ✅ Authentication: bearer token fetching on each request via `IOAuthProvider`
+- ✅ HTTP client configuration and endpoint wiring
+- ✅ Request/response mapping into `Morningstar.Snapshot.Domain` models
+- ✅ Logging and error propagation for diagnostics
 
 ## Extending This Example
 
 ### Adding Your Own Logic
 
-To create a subscription with real data, run the subscription code in `Program.cs` and provide:
+To request snapshot data, update `Program.cs` or call the `SnapshotService` from your own code. Provide:
 
-1. **OAuth Credentials**: Update the `ExampleOAuthProvider` with your Morningstar API credentials or Implement your own OAuthProvider implementation
-2. **Investment Identifiers**: Specify the securities you want to track
-3. **Duration**: How long the subscription should run
+1. `IOAuthProvider` implementation that returns your credentials
+2. The identifiers you want to snapshot (e.g., PerformanceId, Ticker)
 
 #### Configuring OAuth Authentication
 
-The sample includes an `ExampleOAuthProvider` that you can update with your Morningstar API credentials as a quick start test. 
-It is recommended to implement your own OAuthProvider implementation to retrieve your Morningstar API credentials from a secure key vault or secrets manager.
-The `ITokenProvider` service will use these credentials to automatically fetch and manage OAuth bearer tokens.
+The sample includes an `ExampleOAuthProvider` that you can update with your Morningstar API credentials as a quick-start test. For production use, implement a secure `IOAuthProvider` that retrieves credentials from a secrets store (for example: Azure Key Vault, AWS Secrets Manager, HashiCorp Vault) or environment variables. Avoid hardcoding secrets in source control or configuration files.
 
-**Update ExampleOAuthProvider.cs:**
+`ITokenProvider` consumes the `IOAuthProvider` to obtain the raw credentials and will automatically fetch, cache, and refresh bearer tokens as needed. Typical responsibilities:
+
+- `IOAuthProvider`: returns an `OAuthSecret` with credentials (or client assertion) from a secure source
+- `ITokenProvider`: exchanges credentials for a bearer token on each request
+
+Example quick-start implementation (replace with secure retrieval in real deployments):
+
+### Update ExampleOAuthProvider.cs:
 
 ```csharp
 public class ExampleOAuthProvider : IOAuthProvider
 {
     public Task<OAuthSecret> GetOAuthSecretAsync()
     {
-        // TODO: Implement your custom logic to retrieve credentials from a secure store
-        // Examples: Azure Key Vault, AWS Secrets Manager, environment variables, etc.
-        
-        var secret = new OAuthSecret
+        // Replace with secure secret retrieval (Key Vault, env vars, etc.)
+        return Task.FromResult(new OAuthSecret
         {
-            UserName = "{YOUR_USERNAME}",  // Replace with your Morningstar API username
-            Password = "{YOUR_PASSWORD}"   // Replace with your Morningstar API password
-        };
-        return Task.FromResult(secret);
+            UserName = "{YOUR_USERNAME}",
+            Password = "{YOUR_PASSWORD}"
+        });
     }
 }
 ```
 
-**Best Practices:**
-- ✅ **Avoid hardcoding credentials** in source code
-
-**How it works:**
-1. Your `IOAuthProvider` returns credentials via `GetOAuthSecretAsync()`
-2. `ITokenProvider` uses these credentials to call the Morningstar OAuth endpoint
-3. The resulting bearer token is cached and automatically refreshed as needed
-4. All API and WebSocket requests include the valid token in Authorization headers
-
-#### Creating Subscriptions
-
-Example:
+### Registration example (DI):
 
 ```csharp
-var subscriptionRequest = new StartSubscriptionRequest
+services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
+services.AddSnapshotServices(); // registers ITokenProvider and SnapshotService
+```
+
+Security best practices:
+
+- Use a secrets manager and give the app a minimal identity to read secrets
+- Prefer managed identities or short-lived credentials over static secrets
+- Log non-sensitive events only; never write secrets to logs
+
+#### Requesting a Snapshot
+
+The sample exposes a `SnapshotService` you can call to request snapshot data. A typical call looks like:
+
+```csharp
+var snapshotRequest = new SnapshotRequest
 {
-    var subscriptionRequest = new StartSubscriptionRequest
+    Investments = new InvestmentsRequest
     {
-        Stream = new StreamRequest
-        {
-            Investments = new List<Investments>
-            {
-                new Investments
-                { 
-                    IdType = "PerformanceId",
-                    Ids = new List<string> { "0P0000038R" }
-                }
-            },
-            EventTypes = new []
-            {
-                EventTypes.AggregateSummary,
-                EventTypes.Auction,
-                EventTypes.Close,
-                EventTypes.IndexTick,
-                EventTypes.InstrumentPerformanceStatistics,
-                EventTypes.LastPrice,
-                EventTypes.MidPrice,
-                EventTypes.NAVPrice,
-                EventTypes.OHLPrice,
-                EventTypes.SettlementPrice,
-                EventTypes.SpreadStatistics,
-                EventTypes.Status,
-                EventTypes.TopOfBook,
-                EventTypes.Trade,
-                EventTypes.TradeCancellation,
-                EventTypes.TradeCorrection
-            }
-        },
-        DurationSeconds = 300 // Run for 5 minutes
-    };
+        IdType = "PerformanceId",
+        Ids = new List<string> { "0P0000038R" }
+    },
+    EventTypes = new List<string> { EventTypes.LastPrice }
 };
 
-var response = await canaryService.StartLevel1SubscriptionAsync(
-    accessToken, 
-    subscriptionRequest);
-```
+var response = await snapshotService.RequestSnapshotAsync(snapshotRequest);
 
-### Processing WebSocket Messages
-
-The library automatically handles WebSocket connections. To process messages:
-
-1. Subscribe to the appropriate events
-2. Implement custom message handlers
-
-### Adding Background Processing
-
-To run subscriptions in the background:
-
-```csharp
-services.Configure<AppConfig>(context.Configuration.GetSection("AppConfig"));
-services.Configure<EndpointConfig>(context.Configuration.GetSection("EndpointConfig"));
-
-// Register example OAuth provider for your authentication
-services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
-
-// Register all Morningstar Streaming Client services using the extension method
-services.AddStreamingServices();                
-
-// If you want background counter logging, uncomment the following line:
-services.AddStreamingHostedServices();
-```
-
-This adds the `CounterLogger` as a background service that logs metrics.
-
-## Common Use Cases
-
-### 1. Request Multiple Performance Ids
-
-```csharp
-streamRequest = new StreamRequest
+if (response.StatusCode == HttpStatusCode.OK)
 {
-    Investments = new List<Investments>
-    {
-        new Investments
-        { 
-            IdType = "PerformanceId",
-            Ids = new List<string> { "0P000003PE" }
-        }
-    },
-},
+    // inspect response.Data.Realtime or response.Data.Delayed
+    // check response.MetaData.Messages for any warnings
+}
 ```
 
-### 2. Request Multiple Event Types
+#### Request Multiple Event Types
+
+All supported event type constants are defined in `Morningstar.Snapshot.Domain.Constants.EventTypes`:
+
 ```csharp
-EventTypes = new []
+EventTypes = new List<string>
 {
     EventTypes.AggregateSummary,
     EventTypes.Auction,
@@ -273,37 +200,9 @@ EventTypes = new []
 }
 ```
 
-### 2. Long-Running Subscriptions
-
-```csharp
-var request = new StartSubscriptionRequest
-{
-    Stream = streamRequest,
-    DurationSeconds = 3600 // 1 hour
-};
-```
-
-### 3. Managing Multiple Subscriptions
-
-```csharp
-var sub1 = await canaryService.StartLevel1SubscriptionAsync(token, request1);
-var sub2 = await canaryService.StartLevel1SubscriptionAsync(token, request2);
-
-// Check all active subscriptions
-var active = canaryService.GetActiveSubscriptions();
-Console.WriteLine($"Active: {active.Count}");
-
-// Stop specific subscription
-await canaryService.StopSubscriptionAsync(sub1.SubscriptionGuid.Value);
-```
-
 ## Logging
 
-The example uses Serilog with:
-- **Console output**: Real-time logging to the console
-- **File output**: Logs saved to `{LogMessagesPath}/ws-subscription-{guid}.txt`
-
-Configure logging in `appsettings.json`:
+The sample configures Serilog to log to console and optionally to files. Configure logging in `appsettings.json`:
 
 ```json
 {
@@ -314,44 +213,45 @@ Configure logging in `appsettings.json`:
         "Microsoft": "Warning"
       }
     }
-  }
-}
-
-"AppConfig": {
+  },
+  "AppConfig": {
     "LogMessages": false,
     "LogMessagesPath": "logs"
   }
+}
 ```
+
+If `AppConfig:LogMessages` is true the sample writes returned payloads to `{LogMessagesPath}` for later inspection.
 
 ## Troubleshooting
 
 ### "Configuration section not found"
-- Ensure `appsettings.json` is being copied to the output directory
-- Check that section names match exactly (case-sensitive)
+- Ensure `appsettings.json` is copied to output and section names are correct.
 
 ### "Unable to resolve service"
-- Verify `services.AddSingleton<IOAuthProvider, {YourOAuthProviderImplementation}>();` is registered
-- Verify `services.AddStreamingServices()` is called
-- Check that all required configuration sections are registered
+- Verify registration in `ServiceCollectionExtensions` (e.g., `services.AddSnapshotServices()` or similar) and that `ExampleOAuthProvider` is registered:
+
+```csharp
+services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
+services.AddSnapshotServices();
+```
 
 ### "Authentication failed"
-- Validate your access token is current and not expired
-- Check that the token has the correct permissions/scopes
+- Validate your credentials and that the OAuth endpoint configured in `AppConfig:OAuthAddress` is reachable.
 
 ## Next Steps
 
-After understanding this example, you can:
-
-1. **Integrate into your own application** - Copy the service registration pattern
-2. **Customize the data processing** - Add your own WebSocket message handlers
-3. **Add business logic** - Build features on top of the subscription data
+1. Integrate the snapshot request flow into your application using the same DI pattern
+2. Add domain-specific mapping and processing of snapshot results
+3. Securely store credentials and rotate them regularly
 
 ## Additional Resources
 
-- See `..\README.md` for detailed API documentation
-- Check the `Morningstar.Snapshot.Domain` project for all available models and contracts
-- **OpenAPI Specification**: Full API documentation available at [https://streaming.morningstar.com/direct-web-services/swagger/index.html](https://streaming.morningstar.com/direct-web-services/swagger/index.html)
+- See `..\README.md` for the top-level project documentation
+- Check the `Morningstar.Snapshot.Domain` project for available models and contracts
+- An OpenAPI spec for the Snapshot endpoints is not yet available but will be provided in a future release. Once available, use it to verify request/response payloads and explore the full range of supported operations
 
 ## Support
 
-For questions about this example or the Morningstar Streaming Client libraries, please contact your Morningstar support team.
+For questions about this example or the Morningstar Snapshot Client libraries, please contact your Morningstar support team.
+

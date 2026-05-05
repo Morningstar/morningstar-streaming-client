@@ -1,259 +1,202 @@
-# Morningstar Streaming Client Library
+# Morningstar Snapshot Client Library
 
 ## Overview
 
-This library provides a reusable, framework-agnostic implementation for interacting with the Morningstar Streaming API. It can be used in **any .NET 8.0 application** including:
+This library provides a reusable, framework-agnostic implementation for requesting on-demand market data snapshots from the Morningstar Snapshot API. It can be used in **any .NET 8.0 application** including:
+
 - Console applications
-- WPF/WinForms desktop apps
-- Blazor applications
 - ASP.NET Core Web APIs
 - Background services
+- WPF/WinForms desktop apps
+- Blazor applications
 - Azure Functions
+
+## Projects
+
+| Project | Description |
+|---------|-------------|
+| `Morningstar.Snapshot.Client` | Core client library — services, HTTP client, DI registration |
+| `Morningstar.Snapshot.Domain` | Domain models, contracts, config POCOs, and constants |
+| `Morningstar.Snapshot.Client.Sample` | Console app demonstrating end-to-end usage |
+| `Morningstar.Snapshot.Client.Tests` | xUnit unit tests for client and domain code |
+| `Morningstar.Snapshot.Client.BDD.Tests` | SpecFlow BDD scenarios for end-to-end snapshot flows |
 
 ## Key Features
 
-- ✅ **WebSocket-based real-time data streaming**
-- ✅ **Level 1 market data subscriptions**
-- ✅ **Subscription lifecycle management**
+- ✅ **On-demand snapshot requests** for Level 1 market data
+- ✅ **Polymorphic message deserialisation** via `IMessageConverter`
+- ✅ **OAuth 2.0 authentication** with pluggable `IOAuthProvider`
+- ✅ **Dependency injection ready** via `services.AddSnapshotServices()`
+- ✅ **Configurable via `appsettings.json`**
 - ✅ **Comprehensive logging support**
-- ✅ **Dependency injection ready**
-- ✅ **Configurable via appsettings.json**
 
 ## Dependencies
 
-This library uses standard Microsoft.Extensions.* abstractions for:
-- **Dependency Injection** (`Microsoft.Extensions.DependencyInjection.Abstractions`)
-- **Configuration** (`Microsoft.Extensions.Options`)
-- **Logging** (`Microsoft.Extensions.Logging.Abstractions`)
-- **HTTP Client** (`Microsoft.Extensions.Http`)
+This library uses standard `Microsoft.Extensions.*` abstractions:
 
-These are industry-standard abstractions that work with any .NET application.
+| Package | Purpose |
+|---------|---------|
+| `Microsoft.Extensions.DependencyInjection.Abstractions` | Dependency injection |
+| `Microsoft.Extensions.Options` | Configuration binding |
+| `Microsoft.Extensions.Logging.Abstractions` | Logging |
+| `Microsoft.Extensions.Http` | `HttpClient` factory |
 
 ## Getting Started
 
-### 1. Add NuGet References
+### 1. Reference the Libraries
 
-Add the following NuGet packages to your project:
-
-```xml
-<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
-<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
-<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
-```
-
-### 2. Reference the Libraries
-
-Add project references to your `.csproj` file:
+Add project references to your `.csproj`:
 
 ```xml
-<ProjectReference Include="..\Morningstar.Streaming.Client\Morningstar.Streaming.Client.csproj" />
-<ProjectReference Include="..\Morningstar.Streaming.Domain\Morningstar.Streaming.Domain.csproj" />
+<ProjectReference Include="..\Morningstar.Snapshot.Client\Morningstar.Snapshot.Client.csproj" />
+<ProjectReference Include="..\Morningstar.Snapshot.Domain\Morningstar.Snapshot.Domain.csproj" />
 ```
 
-### 3. Configure Services
-
-In your application startup, register the Morningstar Streaming Client services:
+### 2. Configure Services
 
 ```csharp
-using Morningstar.Streaming.Client.Extensions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
+using Morningstar.Snapshot.Client.Extensions;
+using Morningstar.Snapshot.Client.Services.OAuthProvider;
 
-// Build your service collection
-var services = new ServiceCollection();
-
-// Add configuration
-var configuration = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json")
-    .Build();
-
-// Register configuration sections
 services.Configure<AppConfig>(configuration.GetSection("AppConfig"));
 services.Configure<EndpointConfig>(configuration.GetSection("EndpointConfig"));
 
-// Register your OAuth provider for your authentication
+// Register your IOAuthProvider implementation
 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
-// Register Morningstar Streaming Client services
-services.AddStreamingServices();
-
-// Optional: Add hosted services (for background counter logging)
-services.AddStreamingHostedServices();
-
-var serviceProvider = services.BuildServiceProvider();
+// Register all Snapshot Client services
+services.AddSnapshotServices();
 ```
 
-### 4. Configure appsettings.json
-
-Create an `appsettings.json` file with the following structure:
+### 3. Configure `appsettings.json`
 
 ```json
 {
   "AppConfig": {
-    "StreamingApiBaseAddress": "https://streaming.morningstar.com"
+    "SnapshotApiBaseAddress": "https://snapshot.morningstar.com",
+    "OAuthAddress": "https://www.us-api.morningstar.com/token/oauth/",
+    "LogMessages": false,
+    "LogMessagesPath": "logs"
   },
   "EndpointConfig": {
-    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
+    "Level1UrlAddress": "direct-web-services/snapshot/v1/level-1"
   }
 }
 ```
 
-### 5. Use the Services
+### 4. Request a Snapshot
 
 ```csharp
-using Morningstar.Streaming.Client.Services;
-using Morningstar.Streaming.Domain.Contracts;
+using Morningstar.Snapshot.Client.Services;
+using Morningstar.Snapshot.Domain.Constants;
+using Morningstar.Snapshot.Domain.Contracts;
+using System.Net;
 
-// Resolve the canary service
-var canaryService = serviceProvider.GetRequiredService<ICanaryService>();
+var snapshotService = serviceProvider.GetRequiredService<ISnapshotService>();
 
-// Create a subscription request
-var subscriptionRequest = new StartSubscriptionRequest
+var request = new SnapshotRequest
 {
-    Stream = new StreamRequest
+    Investments = new InvestmentsRequest
     {
-        Investments = new List<Investments>
-        {
-            new Investments
-            { 
-                IdType = "PerformanceId",
-                Ids = new List<string> { "0P000003PE" }
-            }
-        },
-        EventTypes = new []
-        {
-            EventTypes.AggregateSummary,
-            EventTypes.Auction,
-            EventTypes.Close,
-            EventTypes.IndexTick,
-            EventTypes.InstrumentPerformanceStatistics,
-            EventTypes.LastPrice,
-            EventTypes.MidPrice,
-            EventTypes.NAVPrice,
-            EventTypes.OHLPrice,
-            EventTypes.SettlementPrice,
-            EventTypes.SpreadStatistics,
-            EventTypes.Status,
-            EventTypes.TopOfBook,
-            EventTypes.Trade,
-            EventTypes.TradeCancellation,
-            EventTypes.TradeCorrection
-        }
+        IdType = "PerformanceId",
+        Ids = new List<string> { "0P0000038R", "0P000003X1" }
     },
-    DurationSeconds = 300 // Run for 5 minutes
+    EventTypes = new List<string>
+    {
+        EventTypes.LastPrice,
+        EventTypes.TopOfBook,
+        EventTypes.Trade
+    }
 };
 
-// Start a subscription 
-var response = await canaryService.StartLevel1SubscriptionAsync(accessToken, subscriptionRequest);
+var response = await snapshotService.RequestSnapshotAsync(request);
 
-if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
+if (response.StatusCode == HttpStatusCode.OK)
 {
-    Console.WriteLine($"Subscription started! GUID: {response.SubscriptionGuid}");
-    
-    // Get active subscriptions
-    var activeSubscriptions = canaryService.GetActiveSubscriptions();
-    Console.WriteLine($"Active subscriptions: {activeSubscriptions.Count}");
-    
-    // Later: Stop the subscription
-    if (response.SubscriptionGuid.HasValue)
-    {
-        await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
-    }
+    // response.Data.Realtime — real-time instrument event data
+    // response.Data.Delayed  — delayed instrument event data
+    // response.MetaData.Messages — warnings (e.g. unrecognised investment IDs)
 }
 ```
-
-## Sample Applications
-
-### Console Application Example
-
-A complete working example is available in the `Morningstar.Streaming.Client.Sample` project. This demonstrates:
-- Setting up dependency injection
-- Configuring the application
-- Creating and managing subscriptions
-- Proper error handling and logging
-
-To run the console example:
-
-```bash
-cd Morningstar.Streaming.Client.Sample
-dotnet run
-```
-
-## Core Services
-
-### ICanaryService
-
-The main service for managing Morningstar Streaming API interactions:
-
-- `StartLevel1SubscriptionAsync()` - Start a new Level 1 subscription
-- `StopSubscriptionAsync()` - Stop an active subscription
-- `GetActiveSubscriptions()` - Get list of all active subscriptions
-
-### IStreamingApiClient
-
-Low-level client for direct API communication:
-
-- `CreateL1StreamAsync()` - Create a Level 1 stream
-- `SubscribeAsync()` - Subscribe to WebSocket updates
-
-### Supporting Services
-
-- **ISubscriptionGroupManager** - Manages subscription lifecycle
-- **IStreamSubscriptionFactory** - Creates stream subscriptions
-- **IWebSocketConsumerFactory** - Creates WebSocket consumers
-- **ICounterLogger** - Background service for logging metrics
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│   Your Application                      │
-│   (Console, Web API, Desktop, etc.)     │
-└─────────────────┬───────────────────────┘
-                  │
-                  ↓
-┌─────────────────────────────────────────┐
-│   Morningstar.Streaming.Client          │
-│   - Services (Business Logic)           │
-│   - Clients (API Communication)         │
-│   - Helpers (HTTP, Utilities)           │
-└─────────────────┬───────────────────────┘
-                  │
-                  ↓
-┌─────────────────────────────────────────┐
-│   Morningstar.Streaming.Domain          │
-│   - Models (Data Structures)            │
-│   - Contracts (DTOs)                    │
-│   - Config (Configuration POCOs)        │
-└─────────────────────────────────────────┘
++--------------+    +-----------------+    +-----------------+    +------------------+    +------------------+
+|   Your App   | -> | SnapshotService | -> | SnapshotFactory | -> | SnapshotApiClient| -> |  Snapshot API    |
+|              |    | (orchestration) |    | (URL building)  |    | (HTTP + auth)    |    | (HTTP endpoints) |
++--------------+    +-----------------+    +-----------------+    +------------------+    +------------------+
+```
+
+## Core Services
+
+| Component | Responsibility |
+|-----------|----------------|
+| `ISnapshotService` | Entry point — call `RequestSnapshotAsync(SnapshotRequest)` to retrieve a snapshot |
+| `SnapshotFactory` | Constructs the endpoint URL from `AppConfig` and `EndpointConfig`, then delegates to `SnapshotApiClient` |
+| `ISnapshotApiClient` | Attaches the bearer token, serialises the request body, and returns the raw `SnapshotResponse` |
+| `ITokenProvider` | Fetches a bearer token from the OAuth endpoint on each request using `IOAuthProvider` credentials |
+| `IOAuthProvider` | Supplies credentials — implement this interface to integrate your secret store |
+
+## Authentication
+
+Implement `IOAuthProvider` to provide credentials:
+
+```csharp
+public class MyOAuthProvider : IOAuthProvider
+{
+    public Task<OAuthSecret> GetOAuthSecretAsync()
+    {
+        // Retrieve from Key Vault, env vars, or another secure store
+        return Task.FromResult(new OAuthSecret
+        {
+            UserName = Environment.GetEnvironmentVariable("MS_USERNAME")!,
+            Password = Environment.GetEnvironmentVariable("MS_PASSWORD")!
+        });
+    }
+}
+```
+
+Security best practices:
+- Retrieve credentials from a secrets manager (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault)
+- Prefer managed identities or short-lived credentials over static secrets
+- Never hardcode credentials in source code or configuration files
+
+## Sample Application
+
+A complete working example is in `Morningstar.Snapshot.Client.Sample`. See its [README](Morningstar.Snapshot.Client.Sample/README.md) for full setup instructions.
+
+```bash
+cd Morningstar.Snapshot.Client.Sample
+dotnet run
 ```
 
 ## Best Practices
 
-1. **Always use dependency injection** - Don't manually instantiate services
-2. **Configure logging** - Use Serilog or another logging provider
-3. **Handle access tokens securely** - Never hardcode tokens
-4. **Manage subscription lifecycle** - Always stop subscriptions when done
-5. **Monitor active subscriptions** - Use `GetActiveSubscriptions()` regularly
-6. **Handle errors gracefully** - Check `ApiResponse.StatusCode` before processing
+1. **Use dependency injection** — never manually instantiate services
+2. **Implement `IOAuthProvider` securely** — retrieve credentials from a secrets store
+3. **Check `response.StatusCode`** before processing response data
+4. **Check `response.MetaData.Messages`** to detect partial failures (e.g. invalid investment IDs)
+5. **Configure logging** — use Serilog or another `Microsoft.Extensions.Logging` provider
 
 ## Troubleshooting
 
-### Common Issues
+**Services not resolving**
+Ensure `services.AddSnapshotServices()` is called and `IOAuthProvider` is registered.
 
-**Problem**: Services not resolving  
-**Solution**: Ensure you called `services.AddStreamingServices()`
+**Configuration values are null**
+Verify `appsettings.json` is copied to output and section names match (`AppConfig`, `EndpointConfig`).
 
-**Problem**: Configuration values are null  
-**Solution**: Check that configuration sections are properly registered with `services.Configure<T>()`
+**Authentication failed**
+Confirm credentials are correct and `AppConfig:OAuthAddress` is reachable.
 
-**Problem**: WebSocket connection fails  
-**Solution**: Verify the access token is valid and the API base address is correct
+**Snapshot request returns non-200**
+Check `response.MetaData.Messages` for details and verify `AppConfig:SnapshotApiBaseAddress` and `EndpointConfig:Level1UrlAddress` are set correctly.
 
-## Support & Contributing
+## Support
 
-For questions or issues related to the Morningstar Streaming Client library, please contact your Morningstar support team.
+For questions or issues, please contact your Morningstar support team.
 
 ## License
 
-This library is provided for integration purposes with the Morningstar Streaming API.
+This library is provided for integration purposes with the Morningstar Snapshot API.

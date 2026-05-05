@@ -17,11 +17,10 @@ public class ExampleOAuthProvider : IOAuthProvider
 
         // NB : Avoid hardcoding credentials in production code,
         // This is just an example of the end result after retrieving credentials from a secret store.
-        var secret = new OAuthSecret
+        return Task.FromResult(new OAuthSecret
         {
             UserName = "{YOUR_USERNAME}",
             Password = "{YOUR_PASSWORD}"
-        };
-        return Task.FromResult(secret);
+        });
     }
 }
