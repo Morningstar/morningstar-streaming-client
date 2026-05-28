@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Morningstar.Streaming.Client.Services;
 using Morningstar.Streaming.Client.Services.Subscriptions;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
@@ -21,6 +22,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<IWebSocketConsumerFactory> mockWebSocketConsumerFactory;
         private readonly Mock<ILogger<CanaryService>> mockLogger;
         private readonly Mock<IOptions<AppConfig>> mockAppConfig;
+        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly CanaryService canaryService;
 
         public CanaryServiceTests()
@@ -31,6 +33,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockWebSocketConsumerFactory = new Mock<IWebSocketConsumerFactory>();
             mockLogger = new Mock<ILogger<CanaryService>>();
             mockAppConfig = new Mock<IOptions<AppConfig>>();
+            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
+
+            mockObservableMetric
+                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
+                .Returns(Task.CompletedTask);
 
             // Setup AppConfig with default values
             mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
@@ -48,7 +55,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object
+                mockAppConfig.Object,
+                mockObservableMetric.Object
             );
         }
 
@@ -308,7 +316,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object
+                mockAppConfig.Object,
+                mockObservableMetric.Object
             );
 
             var request = new StartSubscriptionRequest
@@ -370,7 +379,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 WebSocketUrls = new List<string> { "wss://test.com/stream1" },
                 StartedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddSeconds(60),
-                CancellationTokenSource = cancellationTokenSource
+                CancellationTokenSource = cancellationTokenSource,
+                Format = "avro"
             };
 
             mockSubscriptionManager
@@ -388,6 +398,17 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.ErrorCode.Should().BeNull();
             cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
             mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+            mockObservableMetric.Verify(
+                x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.Is<IDictionary<string, string>?>(tags =>
+                        tags != null &&
+                        tags["SubscriptionId"] == subscriptionGuid.ToString() &&
+                        tags["TopicGuid"] == subscriptionGuid.ToString() &&
+                        tags["DisconnectType"] == "Stopped" &&
+                        tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
+                Times.Once);
         }
 
         [Fact]
@@ -410,6 +431,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
             result.Message.Should().Contain("not found");
             mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+            mockObservableMetric.Verify(
+                x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()),
+                Times.Never);
         }
 
         [Fact]

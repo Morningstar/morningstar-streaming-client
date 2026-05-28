@@ -68,7 +68,8 @@ public class StreamingStepDefinitions
             streamSubscriptionFactoryMock.Object,
             webSocketConsumerFactoryMock.Object,
             loggerMock.Object,
-            appConfigMock.Object);
+            appConfigMock.Object,
+            null);
 
         // Reset connection state
         isConnected = false;

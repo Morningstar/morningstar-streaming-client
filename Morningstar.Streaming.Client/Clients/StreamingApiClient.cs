@@ -6,6 +6,7 @@ using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
@@ -20,23 +21,36 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
+        private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly TimeSpan heartbeatTimeout = TimeSpan.FromMinutes(1);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
+        private const string ExpectedDisconnectType = "Expected";
+        private const string UnexpectedDisconnectType = "Unexpected";
+
+        private enum DisconnectKind
+        {
+            Unexpected,
+            Expected
+        }
 
         private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
 
         private readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
 
+        private readonly record struct ReceiveLoopResult(bool ShouldReconnect, DisconnectKind DisconnectKind);
+
         public StreamingApiClient(
             IApiHelper apiHelper,
             ILogger<StreamingApiClient> logger,
             ITokenProvider tokenProvider,
-            IAvroBinaryDeserializer avroBinaryDeserializer)
+            IAvroBinaryDeserializer avroBinaryDeserializer,
+            IObservableMetric<IMetric>? observableMetric)
         {
             this.apiHelper = apiHelper;
             this.tokenProvider = tokenProvider;
             this.logger = logger;
             this.avroBinaryDeserializer = avroBinaryDeserializer;
+            this.observableMetric = observableMetric;
         }
 
         /// <summary>
@@ -120,6 +134,7 @@ namespace Morningstar.Streaming.Client.Clients
         {
             const int maxAttempts = 5;
             int attempt = 0;
+            DisconnectKind? reconnectMetricKind = null;
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -131,57 +146,139 @@ namespace Morningstar.Streaming.Client.Clients
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
+                    await RecordReconnectIfNeededAsync(subscriptionId, webSocketUrl, reconnectMetricKind);
+                    reconnectMetricKind = null;
+
                     // Signal connection established
                     connected.TrySetResult(true);
 
                     // Reset attempt counter after successful connection
                     attempt = 0;
 
-                    await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger);
+                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger);
+
+                    if (!ShouldReconnect(receiveLoopResult, cancellationToken))
+                    {
+                        return;
+                    }
+
+                    reconnectMetricKind = receiveLoopResult.DisconnectKind;
+                    await RecordDisconnectMetricAsync(subscriptionId, webSocketUrl, reconnectMetricKind.Value);
 
                     // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
                 }
                 catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
                 {
-                    // Only exit if cancellation was explicitly requested
-                    logger.LogInformation(ex, "Cancellation requested. Stopping WebSocket connection.");
-                    if (!connected.Task.IsCompleted) connected.TrySetCanceled();
+                    HandleCancellation(connected, ex, "Cancellation requested. Stopping WebSocket connection.");
                     return;
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "WebSocket failed (attempt {Attempt} of {MaxAttempts}). Reconnecting...", attempt, maxAttempts);
-
-                    if (attempt >= maxAttempts)
+                    if (!await HandleConnectionFailureAsync(
+                        ex,
+                        attempt,
+                        maxAttempts,
+                        connected,
+                        cancellationToken))
                     {
-                        logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
-                        if (!connected.Task.IsCompleted)
-                            connected.TrySetException(ex);
-                        throw;
-                    }
-
-                    // Check if cancellation was requested before delaying
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        logger.LogInformation("Cancellation requested during reconnect delay. Stopping WebSocket connection.");
-                        if (!connected.Task.IsCompleted) connected.TrySetCanceled();
-                        return;
-                    }
-
-                    var delaySeconds = Math.Min(Math.Pow(2, attempt), 30);
-                    try
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
-                    }
-                    catch (OperationCanceledException delayEx)
-                    {
-                        // Cancellation during delay - exit gracefully
-                        logger.LogInformation(delayEx, "Cancellation requested during reconnect delay. Stopping WebSocket connection.");
-                        if (!connected.Task.IsCompleted) connected.TrySetCanceled();
                         return;
                     }
                 }
+            }
+        }
+
+        private static bool ShouldReconnect(ReceiveLoopResult receiveLoopResult, CancellationToken cancellationToken)
+        {
+            return receiveLoopResult.ShouldReconnect && !cancellationToken.IsCancellationRequested;
+        }
+
+        private async Task RecordReconnectIfNeededAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            DisconnectKind? reconnectMetricKind)
+        {
+            if (!reconnectMetricKind.HasValue)
+            {
+                return;
+            }
+
+            await RecordLifecycleMetricAsync(
+                MetricEvents.WebSocketReconnections,
+                subscriptionId,
+                webSocketUrl,
+                reconnectMetricKind.Value);
+        }
+
+        private async Task RecordDisconnectMetricAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            DisconnectKind disconnectKind)
+        {
+            await RecordLifecycleMetricAsync(
+                MetricEvents.WebSocketDisconnections,
+                subscriptionId,
+                webSocketUrl,
+                disconnectKind);
+        }
+
+        private async Task<bool> HandleConnectionFailureAsync(
+            Exception exception,
+            int attempt,
+            int maxAttempts,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken)
+        {
+            logger.LogWarning(exception, "WebSocket failed (attempt {Attempt} of {MaxAttempts}). Reconnecting...", attempt, maxAttempts);
+
+            if (attempt >= maxAttempts)
+            {
+                logger.LogError("Maximum retry attempts ({MaxAttempts}) reached. Stopping WebSocket connection.", maxAttempts);
+                if (!connected.Task.IsCompleted)
+                {
+                    connected.TrySetException(exception);
+                }
+
+                throw exception;
+            }
+
+            return await DelayReconnectAsync(attempt, connected, cancellationToken);
+        }
+
+        private async Task<bool> DelayReconnectAsync(
+            int attempt,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                HandleCancellation(connected, null, "Cancellation requested during reconnect delay. Stopping WebSocket connection.");
+                return false;
+            }
+
+            var delaySeconds = Math.Min(Math.Pow(2, attempt), 30);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+                return true;
+            }
+            catch (OperationCanceledException ex)
+            {
+                HandleCancellation(connected, ex, "Cancellation requested during reconnect delay. Stopping WebSocket connection.");
+                return false;
+            }
+        }
+
+        private void HandleCancellation(
+            TaskCompletionSource<bool> connected,
+            Exception? exception,
+            string message)
+        {
+            logger.LogInformation(exception, message);
+            if (!connected.Task.IsCompleted)
+            {
+                connected.TrySetCanceled();
             }
         }
 
@@ -200,16 +297,17 @@ namespace Morningstar.Streaming.Client.Clients
             return ws;
         }
 
-        private async Task StartReceiveLoopAsync(
-        Guid subscriptionId,
-        ClientWebSocket ws,
-        Func<string, Task> onMessageAsync,
-        CancellationToken cancellationToken,
-        ICounterLogger? counterLogger,
-        ILatencyLogger? latencyLogger)
+        private async Task<ReceiveLoopResult> StartReceiveLoopAsync(
+            Guid subscriptionId,
+            ClientWebSocket ws,
+            Func<string, Task> onMessageAsync,
+            CancellationToken cancellationToken,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger)
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
+            var disconnectKind = DisconnectKind.Unexpected;
             using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
 
@@ -232,6 +330,7 @@ namespace Morningstar.Streaming.Client.Clients
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
                 shutdownCancellationTokenSource,
+                detectedDisconnectKind => disconnectKind = detectedDisconnectKind,
                 telemetryChannel.Writer,
                 shutdownCancellationToken);
 
@@ -257,7 +356,7 @@ namespace Morningstar.Streaming.Client.Clients
                     }
                     catch (OperationCanceledException) when (shutdownCancellationToken.IsCancellationRequested)
                     {
-                        break;
+                        return new ReceiveLoopResult(false, DisconnectKind.Unexpected);
                     }
                     catch (Exception ex)
                     {
@@ -292,6 +391,8 @@ namespace Morningstar.Streaming.Client.Clients
                     IgnoreCancellationAsync(telemetryTask),
                     IgnoreCancellationAsync(heartbeatTask));
             }
+
+                    return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, disconnectKind);
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -301,6 +402,7 @@ namespace Morningstar.Streaming.Client.Clients
             Func<string, Task> onMessageAsync,
             Action updateLastHeartbeat,
             CancellationTokenSource shutdownCancellationTokenSource,
+            Action<DisconnectKind> setDisconnectKind,
             ChannelWriter<TelemetryItem> telemetryWriter,
             CancellationToken cancellationToken)
         {
@@ -308,24 +410,7 @@ namespace Morningstar.Streaming.Client.Clients
             {
                 await foreach (var message in reader.ReadAllAsync(cancellationToken))
                 {
-                    string? jsonMessage = null;
-
-                    if (message.MessageType == WebSocketMessageType.Text)
-                    {
-                        jsonMessage = Encoding.UTF8.GetString(message.Payload);
-                    }
-                    else if (message.MessageType == WebSocketMessageType.Binary)
-                    {
-                        try
-                        {
-                            jsonMessage = await avroBinaryDeserializer.DeserializeAsync<string>(message.Payload);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "Failed to process binary Avro message. Skipping.");
-                            continue;
-                        }
-                    }
+                    var jsonMessage = await DeserializeIncomingMessageAsync(message);
 
                     if (jsonMessage == null)
                     {
@@ -333,16 +418,19 @@ namespace Morningstar.Streaming.Client.Clients
                         continue;
                     }
 
+                    if (TryGetDisconnectKind(jsonMessage, out var disconnectKind))
+                    {
+                        setDisconnectKind(disconnectKind);
+                    }
+
                     if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase))
                     {
-                        updateLastHeartbeat();
-                        var heartbeatAcknowledged = await TrySendHeartbeatAckAsync(
+                        if (!await HandleHeartbeatAsync(
                             subscriptionId,
                             ws,
+                            updateLastHeartbeat,
                             shutdownCancellationTokenSource,
-                            cancellationToken);
-
-                        if (!heartbeatAcknowledged)
+                            cancellationToken))
                         {
                             break;
                         }
@@ -367,6 +455,45 @@ namespace Morningstar.Streaming.Client.Clients
             {
                 telemetryWriter.TryComplete();
             }
+        }
+
+        private async Task<string?> DeserializeIncomingMessageAsync(IncomingMessage message)
+        {
+            if (message.MessageType == WebSocketMessageType.Text)
+            {
+                return Encoding.UTF8.GetString(message.Payload);
+            }
+
+            if (message.MessageType != WebSocketMessageType.Binary)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await avroBinaryDeserializer.DeserializeAsync<string>(message.Payload);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to process binary Avro message. Skipping.");
+                return null;
+            }
+        }
+
+        private async Task<bool> HandleHeartbeatAsync(
+            Guid subscriptionId,
+            ClientWebSocket ws,
+            Action updateLastHeartbeat,
+            CancellationTokenSource shutdownCancellationTokenSource,
+            CancellationToken cancellationToken)
+        {
+            updateLastHeartbeat();
+
+            return await TrySendHeartbeatAckAsync(
+                subscriptionId,
+                ws,
+                shutdownCancellationTokenSource,
+                cancellationToken);
         }
 
         private static void AbortWebSocket(ClientWebSocket ws)
@@ -536,6 +663,114 @@ namespace Morningstar.Streaming.Client.Clients
             await shutdownCancellationTokenSource.CancelAsync();
             AbortWebSocket(ws);
             return false;
+        }
+
+        private async Task RecordLifecycleMetricAsync(
+            string metricName,
+            Guid subscriptionId,
+            string webSocketUrl,
+            DisconnectKind disconnectKind)
+        {
+            if (observableMetric == null)
+            {
+                return;
+            }
+
+            var tags = BuildLifecycleMetricTags(metricName, subscriptionId, webSocketUrl, ToDisconnectType(disconnectKind));
+            await observableMetric.RecordMetric(metricName, new AtomicLong { Value = 1 }, tags);
+        }
+
+        private static string ToDisconnectType(DisconnectKind disconnectKind)
+        {
+            return disconnectKind == DisconnectKind.Expected
+                ? ExpectedDisconnectType
+                : UnexpectedDisconnectType;
+        }
+
+        internal static Dictionary<string, string> BuildLifecycleMetricTags(
+            string metricName,
+            Guid subscriptionId,
+            string webSocketUrl,
+            string? disconnectType)
+        {
+            var tags = new Dictionary<string, string>
+            {
+                { "TopicGuid", subscriptionId.ToString() },
+                { "SubscriptionId", subscriptionId.ToString() },
+                { "WebSocketUrl", webSocketUrl }
+            };
+
+            if (!string.IsNullOrWhiteSpace(disconnectType))
+            {
+                var disconnectTypeTagName = metricName == MetricEvents.WebSocketReconnections
+                    ? "PreviousDisconnectType"
+                    : "DisconnectType";
+
+                tags[disconnectTypeTagName] = disconnectType;
+            }
+
+            return tags;
+        }
+
+        internal static bool TryGetExpectedDisconnectType(string jsonMessage, out string disconnectType)
+        {
+            disconnectType = UnexpectedDisconnectType;
+
+            if (!TryGetDisconnectKind(jsonMessage, out var disconnectKind))
+            {
+                return false;
+            }
+
+            disconnectType = ToDisconnectType(disconnectKind);
+            return true;
+        }
+
+        private static bool TryGetDisconnectKind(string jsonMessage, out DisconnectKind disconnectKind)
+        {
+            disconnectKind = DisconnectKind.Unexpected;
+
+            try
+            {
+                var payload = JObject.Parse(jsonMessage);
+
+                if (IsExpectedDisconnect(payload))
+                {
+                    disconnectKind = DisconnectKind.Expected;
+                    return true;
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore invalid telemetry payloads for lifecycle classification.
+            }
+
+            return false;
+        }
+
+        private static bool IsExpectedDisconnect(JObject payload)
+        {
+            var eventType = payload["EventType"]?.Value<string>();
+            if (string.Equals(eventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(
+                    payload["Message"]?["NoticeType"]?.Value<string>(),
+                    "Disconnect",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            var eventTypes = payload["EventTypes"] as JArray;
+            var hasAdminEventType = eventTypes?.Values<string>()
+                .Any(value => string.Equals(value, EventTypes.Admin, StringComparison.OrdinalIgnoreCase)) == true;
+
+            if (!hasAdminEventType)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                payload["Admin"]?["NoticeType"]?.Value<string>(),
+                "Disconnect",
+                StringComparison.OrdinalIgnoreCase);
         }
 
     }

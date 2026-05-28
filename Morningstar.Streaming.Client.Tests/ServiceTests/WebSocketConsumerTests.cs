@@ -524,7 +524,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             mockLogger.Verify(
                 x => x.Log(
-                    LogLevel.Warning,
+                    LogLevel.Information,
                     It.IsAny<EventId>(),
                     It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("LogFromChannelAsync cancelled")),
                     It.IsAny<Exception>(),
@@ -736,7 +736,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StartConsumingAsync_WithUnexpectedDisconnection_DisconnectionMetricRecorded()
+        public async Task StartConsumingAsync_WithUnexpectedDisconnection_DoesNotRecordMetricInConsumer()
         {
             // Arrange
             var guid = Guid.NewGuid();
@@ -784,7 +784,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 "WebSocketDisconnections",
                 It.IsAny<AtomicLong>(),
                 It.IsAny<Dictionary<string, string>>()),
-                Times.Once);
+                Times.Never);
         }
     }
 }

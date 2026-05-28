@@ -6,6 +6,7 @@ using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
 using Morningstar.Streaming.Client.Services.TokenProvider;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
@@ -19,6 +20,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         private readonly Mock<ITokenProvider> mockTokenProvider;
         private readonly Mock<ILogger<StreamingApiClient>> mockLogger;
         private readonly Mock<IAvroBinaryDeserializer> mockAvroBinaryDeserializer;
+        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly StreamingApiClient streamingApiClient;
 
         public StreamingApiClientTests()
@@ -28,6 +30,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             mockTokenProvider = new Mock<ITokenProvider>();
             mockLogger = new Mock<ILogger<StreamingApiClient>>();
             mockAvroBinaryDeserializer = new Mock<IAvroBinaryDeserializer>();
+            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup default token provider behavior
             mockTokenProvider
@@ -39,7 +42,8 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                 mockApiHelper.Object,
                 mockLogger.Object,
                 mockTokenProvider.Object,
-                mockAvroBinaryDeserializer.Object
+                mockAvroBinaryDeserializer.Object,
+                mockObservableMetric.Object
             );
         }
 
@@ -239,5 +243,74 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                 Times.AtLeastOnce(),
                "should log warning about failed connection and retry");
         }
+
+                [Fact]
+                public void TryGetExpectedDisconnectType_WithAdminDisconnectEnvelope_ReturnsExpected()
+                {
+                        var jsonMessage = """
+                                {
+                                    "EventType": "Admin",
+                                    "Message": {
+                                        "NoticeType": "Disconnect"
+                                    }
+                                }
+                                """;
+
+                        var result = StreamingApiClient.TryGetExpectedDisconnectType(jsonMessage, out var disconnectType);
+
+                        result.Should().BeTrue();
+                        disconnectType.Should().Be("Expected");
+                }
+
+                [Fact]
+                public void TryGetExpectedDisconnectType_WithAvroAdminDisconnectEnvelope_ReturnsExpected()
+                {
+                        var jsonMessage = """
+                                {
+                                    "EventTypes": ["Admin"],
+                                    "Admin": {
+                                        "NoticeType": "Disconnect"
+                                    }
+                                }
+                                """;
+
+                        var result = StreamingApiClient.TryGetExpectedDisconnectType(jsonMessage, out var disconnectType);
+
+                        result.Should().BeTrue();
+                        disconnectType.Should().Be("Expected");
+                }
+
+                [Fact]
+                public void BuildLifecycleMetricTags_IncludesSubscriptionIdAndDisconnectType()
+                {
+                        var subscriptionId = Guid.NewGuid();
+                        var tags = StreamingApiClient.BuildLifecycleMetricTags(
+                            MetricEvents.WebSocketDisconnections,
+                            subscriptionId,
+                            "wss://test.com/stream",
+                            "Unexpected");
+
+                        tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
+                        tags["TopicGuid"].Should().Be(subscriptionId.ToString());
+                        tags["DisconnectType"].Should().Be("Unexpected");
+                        tags["WebSocketUrl"].Should().Be("wss://test.com/stream");
+                }
+
+                [Fact]
+                public void BuildLifecycleMetricTags_ForReconnect_UsesPreviousDisconnectType()
+                {
+                        var subscriptionId = Guid.NewGuid();
+                        var tags = StreamingApiClient.BuildLifecycleMetricTags(
+                            MetricEvents.WebSocketReconnections,
+                            subscriptionId,
+                            "wss://test.com/stream",
+                            "Expected");
+
+                        tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
+                        tags["TopicGuid"].Should().Be(subscriptionId.ToString());
+                        tags["PreviousDisconnectType"].Should().Be("Expected");
+                        tags.Should().NotContainKey("DisconnectType");
+                        tags["WebSocketUrl"].Should().Be("wss://test.com/stream");
+                }
     }
 }
