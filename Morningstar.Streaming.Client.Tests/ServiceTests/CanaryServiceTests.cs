@@ -380,7 +380,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 StartedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddSeconds(60),
                 CancellationTokenSource = cancellationTokenSource,
-                Format = "avro"
+                Format = "avro",
+                Purpose = "Sample purpose"
             };
 
             mockSubscriptionManager
@@ -406,6 +407,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                         tags != null &&
                         tags["SubscriptionId"] == subscriptionGuid.ToString() &&
                         tags["TopicGuid"] == subscriptionGuid.ToString() &&
+                        tags["Purpose"] == "Sample purpose" &&
                         tags["DisconnectType"] == "Stopped" &&
                         tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
                 Times.Once);

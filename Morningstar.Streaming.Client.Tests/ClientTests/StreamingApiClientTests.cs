@@ -288,10 +288,12 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             MetricEvents.WebSocketDisconnections,
                             subscriptionId,
                             "wss://test.com/stream",
+                            "Sample purpose",
                             "Unexpected");
 
                         tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
                         tags["TopicGuid"].Should().Be(subscriptionId.ToString());
+                        tags["Purpose"].Should().Be("Sample purpose");
                         tags["DisconnectType"].Should().Be("Unexpected");
                         tags["WebSocketUrl"].Should().Be("wss://test.com/stream");
                 }
@@ -304,10 +306,12 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             MetricEvents.WebSocketReconnections,
                             subscriptionId,
                             "wss://test.com/stream",
+                            "Sample purpose",
                             "Expected");
 
                         tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
                         tags["TopicGuid"].Should().Be(subscriptionId.ToString());
+                        tags["Purpose"].Should().Be("Sample purpose");
                         tags["PreviousDisconnectType"].Should().Be("Expected");
                         tags.Should().NotContainKey("DisconnectType");
                         tags["WebSocketUrl"].Should().Be("wss://test.com/stream");

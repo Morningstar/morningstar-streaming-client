@@ -168,7 +168,7 @@ namespace Morningstar.Streaming.Client.Services
             {
                 var sub = subscriptionManager.Get(guid);
                 await RecordStoppedMetricsAsync(sub);
-                sub.CancellationTokenSource.Cancel();
+                await sub.CancellationTokenSource.CancelAsync();
                 return new StopSubscriptionResponse
                 {
                     Success = true,
@@ -201,7 +201,7 @@ namespace Morningstar.Streaming.Client.Services
                 await observableMetric.RecordMetric(
                     MetricEvents.WebSocketDisconnections,
                     new AtomicLong { Value = 1 },
-                    BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, StoppedDisconnectType));
+                    BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, subscription.Purpose, StoppedDisconnectType));
             }
         }
 
@@ -219,15 +219,22 @@ namespace Morningstar.Streaming.Client.Services
             }
         }
 
-        private static Dictionary<string, string> BuildLifecycleMetricTags(Guid subscriptionId, string webSocketUrl, string disconnectType)
+        private static Dictionary<string, string> BuildLifecycleMetricTags(Guid subscriptionId, string webSocketUrl, string? purpose, string disconnectType)
         {
-            return new Dictionary<string, string>
+            var tags = new Dictionary<string, string>
             {
                 { "TopicGuid", subscriptionId.ToString() },
                 { "SubscriptionId", subscriptionId.ToString() },
                 { "WebSocketUrl", webSocketUrl },
                 { "DisconnectType", disconnectType }
             };
+
+            if (!string.IsNullOrWhiteSpace(purpose))
+            {
+                tags["Purpose"] = purpose;
+            }
+
+            return tags;
         }
 
         public List<SubscriptionGroupView> GetActiveSubscriptions()

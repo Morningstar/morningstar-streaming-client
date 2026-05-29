@@ -37,7 +37,7 @@ namespace Morningstar.Streaming.Client.Clients
 
         private readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
 
-        private readonly record struct ReceiveLoopResult(bool ShouldReconnect, DisconnectKind DisconnectKind);
+        private readonly record struct ReceiveLoopResult(bool ShouldReconnect, DisconnectKind Kind);
 
         public StreamingApiClient(
             IApiHelper apiHelper,
@@ -146,7 +146,7 @@ namespace Morningstar.Streaming.Client.Clients
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
-                    await RecordReconnectIfNeededAsync(subscriptionId, webSocketUrl, reconnectMetricKind);
+                    await RecordReconnectIfNeededAsync(subscriptionId, webSocketUrl, purpose, reconnectMetricKind);
                     reconnectMetricKind = null;
 
                     // Signal connection established
@@ -162,8 +162,8 @@ namespace Morningstar.Streaming.Client.Clients
                         return;
                     }
 
-                    reconnectMetricKind = receiveLoopResult.DisconnectKind;
-                    await RecordDisconnectMetricAsync(subscriptionId, webSocketUrl, reconnectMetricKind.Value);
+                    reconnectMetricKind = receiveLoopResult.Kind;
+                    await RecordDisconnectMetricAsync(subscriptionId, webSocketUrl, purpose, reconnectMetricKind.Value);
 
                     // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
@@ -196,6 +196,7 @@ namespace Morningstar.Streaming.Client.Clients
         private async Task RecordReconnectIfNeededAsync(
             Guid subscriptionId,
             string webSocketUrl,
+            string? purpose,
             DisconnectKind? reconnectMetricKind)
         {
             if (!reconnectMetricKind.HasValue)
@@ -207,18 +208,21 @@ namespace Morningstar.Streaming.Client.Clients
                 MetricEvents.WebSocketReconnections,
                 subscriptionId,
                 webSocketUrl,
+                purpose,
                 reconnectMetricKind.Value);
         }
 
         private async Task RecordDisconnectMetricAsync(
             Guid subscriptionId,
             string webSocketUrl,
+            string? purpose,
             DisconnectKind disconnectKind)
         {
             await RecordLifecycleMetricAsync(
                 MetricEvents.WebSocketDisconnections,
                 subscriptionId,
                 webSocketUrl,
+                purpose,
                 disconnectKind);
         }
 
@@ -669,6 +673,7 @@ namespace Morningstar.Streaming.Client.Clients
             string metricName,
             Guid subscriptionId,
             string webSocketUrl,
+            string? purpose,
             DisconnectKind disconnectKind)
         {
             if (observableMetric == null)
@@ -676,7 +681,7 @@ namespace Morningstar.Streaming.Client.Clients
                 return;
             }
 
-            var tags = BuildLifecycleMetricTags(metricName, subscriptionId, webSocketUrl, ToDisconnectType(disconnectKind));
+            var tags = BuildLifecycleMetricTags(metricName, subscriptionId, webSocketUrl, purpose, ToDisconnectType(disconnectKind));
             await observableMetric.RecordMetric(metricName, new AtomicLong { Value = 1 }, tags);
         }
 
@@ -691,6 +696,7 @@ namespace Morningstar.Streaming.Client.Clients
             string metricName,
             Guid subscriptionId,
             string webSocketUrl,
+            string? purpose,
             string? disconnectType)
         {
             var tags = new Dictionary<string, string>
@@ -699,6 +705,11 @@ namespace Morningstar.Streaming.Client.Clients
                 { "SubscriptionId", subscriptionId.ToString() },
                 { "WebSocketUrl", webSocketUrl }
             };
+
+            if (!string.IsNullOrWhiteSpace(purpose))
+            {
+                tags["Purpose"] = purpose;
+            }
 
             if (!string.IsNullOrWhiteSpace(disconnectType))
             {

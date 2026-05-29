@@ -70,10 +70,11 @@ public class WebSocketLifecycleMetricLogger : IObservableMetric<IMetric>, IHoste
             : "DisconnectType";
 
         logger.LogInformation(
-            "Observed {MetricName}. SubscriptionId: {SubscriptionId}. TopicGuid: {TopicGuid}. {DisconnectTypeTagName}: {DisconnectType}. WebSocketUrl: {WebSocketUrl}",
+            "Observed {MetricName}. SubscriptionId: {SubscriptionId}. TopicGuid: {TopicGuid}. Purpose: {Purpose}. {DisconnectTypeTagName}: {DisconnectType}. WebSocketUrl: {WebSocketUrl}",
             name,
             GetTagValue(tags, "SubscriptionId"),
             GetTagValue(tags, "TopicGuid"),
+            GetTagValue(tags, "Purpose"),
             disconnectTypeTagName,
             GetTagValue(tags, disconnectTypeTagName),
             GetTagValue(tags, "WebSocketUrl"));
