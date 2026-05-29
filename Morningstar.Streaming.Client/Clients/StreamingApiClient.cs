@@ -311,7 +311,7 @@ namespace Morningstar.Streaming.Client.Clients
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
-            var disconnectKind = DisconnectKind.Unexpected;
+            var pendingDisconnectKind = DisconnectKind.Unexpected;
             using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
 
@@ -334,7 +334,7 @@ namespace Morningstar.Streaming.Client.Clients
                 onMessageAsync,
                 () => lastHeartbeat = DateTime.UtcNow,
                 shutdownCancellationTokenSource,
-                detectedDisconnectKind => disconnectKind = detectedDisconnectKind,
+                detectedDisconnectKind => pendingDisconnectKind = detectedDisconnectKind,
                 telemetryChannel.Writer,
                 shutdownCancellationToken);
 
@@ -396,7 +396,7 @@ namespace Morningstar.Streaming.Client.Clients
                     IgnoreCancellationAsync(heartbeatTask));
             }
 
-                    return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, disconnectKind);
+                    return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -422,11 +422,6 @@ namespace Morningstar.Streaming.Client.Clients
                         continue;
                     }
 
-                    if (TryGetDisconnectKind(jsonMessage, out var disconnectKind))
-                    {
-                        setDisconnectKind(disconnectKind);
-                    }
-
                     if (jsonMessage.Contains(EventTypes.HeartBeat, StringComparison.OrdinalIgnoreCase))
                     {
                         if (!await HandleHeartbeatAsync(
@@ -441,6 +436,8 @@ namespace Morningstar.Streaming.Client.Clients
 
                         continue;
                     }
+
+                    setDisconnectKind(GetNextPendingDisconnectKind(jsonMessage));
 
                     telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
 
@@ -734,6 +731,18 @@ namespace Morningstar.Streaming.Client.Clients
 
             disconnectType = ToDisconnectType(disconnectKind);
             return true;
+        }
+
+        internal static string GetPendingDisconnectType(string jsonMessage)
+        {
+            return ToDisconnectType(GetNextPendingDisconnectKind(jsonMessage));
+        }
+
+        private static DisconnectKind GetNextPendingDisconnectKind(string jsonMessage)
+        {
+            return TryGetDisconnectKind(jsonMessage, out var disconnectKind)
+                ? disconnectKind
+                : DisconnectKind.Unexpected;
         }
 
         private static bool TryGetDisconnectKind(string jsonMessage, out DisconnectKind disconnectKind)
