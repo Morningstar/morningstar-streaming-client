@@ -64,11 +64,11 @@ class Program
                 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
                 // If you want to log out counters and latency, uncomment the following services. Otherwise, you can omit these or replace them with your own implementations.
-                services.AddTransient<ICounterLogger, CounterLogger>();
-                services.AddTransient<ILatencyLogger, LatencyLogger>();
+                //services.AddTransient<ICounterLogger, CounterLogger>();
+                //services.AddTransient<ILatencyLogger, LatencyLogger>();
 
                 // If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
-                services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
+                //services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
 
                 // Register all Morningstar Streaming Client services using the extension method
                 services.AddStreamingServices();
