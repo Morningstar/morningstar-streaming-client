@@ -312,6 +312,38 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                         disconnectType.Should().Be("Unexpected");
                     }
 
+                    [Fact]
+                    public void GetUpdatedPendingDisconnectType_WithExpectedCurrentAndOrdinaryMessage_KeepsExpected()
+                    {
+                        var jsonMessage = """
+                            {
+                                "EventType": "Trade",
+                                "PublishTime": 123456789
+                            }
+                            """;
+
+                        var disconnectType = StreamingApiClient.GetUpdatedPendingDisconnectType("Expected", jsonMessage);
+
+                        disconnectType.Should().Be("Expected");
+                    }
+
+                    [Fact]
+                    public void GetUpdatedPendingDisconnectType_WithUnexpectedCurrentAndAdminDisconnect_ReturnsExpected()
+                    {
+                        var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+                        var disconnectType = StreamingApiClient.GetUpdatedPendingDisconnectType("Unexpected", jsonMessage);
+
+                        disconnectType.Should().Be("Expected");
+                    }
+
                 [Fact]
                 public void BuildLifecycleMetricTags_IncludesSubscriptionIdAndDisconnectType()
                 {

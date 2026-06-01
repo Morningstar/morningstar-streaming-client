@@ -336,7 +336,7 @@ namespace Morningstar.Streaming.Client.Clients
                 shutdownCancellationTokenSource,
                 detectedDisconnectKind => pendingDisconnectKind = detectedDisconnectKind,
                 telemetryChannel.Writer,
-                shutdownCancellationToken);
+                cancellationToken);
 
             var telemetryTask = TelemetryLoopAsync(
                 subscriptionId,
@@ -385,15 +385,14 @@ namespace Morningstar.Streaming.Client.Clients
             }
             finally
             {
-                await shutdownCancellationTokenSource.CancelAsync();
                 messageChannel.Writer.TryComplete();
-                telemetryChannel.Writer.TryComplete();
+                await IgnoreCancellationAsync(processorTask);
+                await IgnoreCancellationAsync(telemetryTask);
+
+                await shutdownCancellationTokenSource.CancelAsync();
                 AbortWebSocket(ws);
 
-                await Task.WhenAll(
-                    IgnoreCancellationAsync(processorTask),
-                    IgnoreCancellationAsync(telemetryTask),
-                    IgnoreCancellationAsync(heartbeatTask));
+                await IgnoreCancellationAsync(heartbeatTask);
             }
 
                     return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
@@ -437,7 +436,10 @@ namespace Morningstar.Streaming.Client.Clients
                         continue;
                     }
 
-                    setDisconnectKind(GetNextPendingDisconnectKind(jsonMessage));
+                    if (TryGetDisconnectKind(jsonMessage, out var disconnectKind))
+                    {
+                        setDisconnectKind(disconnectKind);
+                    }
 
                     telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
 
@@ -736,6 +738,27 @@ namespace Morningstar.Streaming.Client.Clients
         internal static string GetPendingDisconnectType(string jsonMessage)
         {
             return ToDisconnectType(GetNextPendingDisconnectKind(jsonMessage));
+        }
+
+        internal static string GetUpdatedPendingDisconnectType(string currentDisconnectType, string jsonMessage)
+        {
+            var currentDisconnectKind = string.Equals(currentDisconnectType, ExpectedDisconnectType, StringComparison.OrdinalIgnoreCase)
+                ? DisconnectKind.Expected
+                : DisconnectKind.Unexpected;
+
+            return ToDisconnectType(UpdatePendingDisconnectKind(currentDisconnectKind, jsonMessage));
+        }
+
+        private static DisconnectKind UpdatePendingDisconnectKind(DisconnectKind currentDisconnectKind, string jsonMessage)
+        {
+            if (currentDisconnectKind == DisconnectKind.Expected)
+            {
+                return DisconnectKind.Expected;
+            }
+
+            return TryGetDisconnectKind(jsonMessage, out var disconnectKind)
+                ? disconnectKind
+                : currentDisconnectKind;
         }
 
         private static DisconnectKind GetNextPendingDisconnectKind(string jsonMessage)
