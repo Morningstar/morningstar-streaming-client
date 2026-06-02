@@ -15,7 +15,7 @@ namespace Morningstar.Streaming.Client.Clients
 {
     public class StreamingApiClient : IStreamingApiClient
     {
-        private const int FlushIntervalMillis = 1000;
+        private const int FlushIntervalMillis = 60_000;
         private static readonly TimeSpan heartbeatAcknowledgementTimeout = TimeSpan.FromSeconds(5);
         private readonly IApiHelper apiHelper;
         private readonly ITokenProvider tokenProvider;
