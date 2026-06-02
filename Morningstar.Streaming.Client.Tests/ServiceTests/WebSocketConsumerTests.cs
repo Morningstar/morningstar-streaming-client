@@ -474,7 +474,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StartConsumingAsync_WithCancellation_LogsWarning()
+        public async Task StartConsumingAsync_WithCancellation_LogsInfo()
         {
             // Arrange
             var guid = Guid.NewGuid();
