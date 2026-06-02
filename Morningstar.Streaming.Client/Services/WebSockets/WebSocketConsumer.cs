@@ -15,7 +15,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         private readonly ICounterLogger? counterLogger;
         private readonly ILatencyLogger? latencyLogger;
-        private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly ILogger eventsLogger;
         private readonly Channel<string> channel;
         private readonly Guid topicGuid;
@@ -41,7 +40,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.purpose = purpose;
             this.counterLogger = counterLogger;
             this.latencyLogger = latencyLogger;
-            this.observableMetric = observableMetric;
 
             channel = Channel.CreateUnbounded<string>();
 
@@ -96,7 +94,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
             catch (Exception ex)
             {
-                await RecordWebSocketDisconnectionMetric();
                 logger.LogError(ex, "WebSocket consumer failed unexpectedly.");
             }
             finally
@@ -119,7 +116,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
             catch (OperationCanceledException ex)
             {
-                logger.LogWarning(ex, "LogFromChannelAsync cancelled.");
+                logger.LogInformation(ex, "LogFromChannelAsync cancelled.");
             }
             catch (Exception ex)
             {
@@ -127,19 +124,5 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
         }
 
-        private async Task RecordWebSocketDisconnectionMetric()
-        {
-            if (observableMetric == null)
-            {
-                return;
-            }
-
-            var metric = new AtomicLong { Value = 1 };
-            _ = observableMetric.RecordMetric("WebSocketDisconnections", metric, new Dictionary<string, string>
-                {
-                    { "TopicGuid", topicGuid.ToString() },
-                    { "WebSocketUrl", wsUrl }
-                });
-        }        
     }
 }

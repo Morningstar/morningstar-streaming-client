@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Services.Subscriptions;
+using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
@@ -20,19 +21,23 @@ namespace Morningstar.Streaming.Client.Services
         protected readonly IStreamSubscriptionFactory streamSubscriptionFactory;
         protected readonly IWebSocketConsumerFactory factory;
         protected readonly ILogger logger;
+        private readonly IObservableMetric<IMetric>? observableMetric;
         protected readonly bool logMessages;
+        private const string StoppedDisconnectType = "Stopped";
 
         public CanaryService(
             ISubscriptionGroupManager subscriptionManager,
             IStreamSubscriptionFactory streamSubscriptionFactory,
             IWebSocketConsumerFactory factory,
             ILogger<CanaryService> logger,
-            IOptions<AppConfig> appConfig)
+            IOptions<AppConfig> appConfig,
+            IObservableMetric<IMetric>? observableMetric)
         {
             this.subscriptionManager = subscriptionManager;
             this.streamSubscriptionFactory = streamSubscriptionFactory;
             this.factory = factory;
             this.logger = logger;
+            this.observableMetric = observableMetric;
             logMessages = appConfig.Value.LogMessages;
         }
 
@@ -157,30 +162,79 @@ namespace Morningstar.Streaming.Client.Services
             };
         }
 
-        public Task<StopSubscriptionResponse> StopSubscriptionAsync(Guid guid)
+        public async Task<StopSubscriptionResponse> StopSubscriptionAsync(Guid guid)
         {
             try
             {
                 var sub = subscriptionManager.Get(guid);
-                sub.CancellationTokenSource.Cancel();
-                return Task.FromResult(new StopSubscriptionResponse
+                await RecordStoppedMetricsAsync(sub);
+                await sub.CancellationTokenSource.CancelAsync();
+                return new StopSubscriptionResponse
                 {
                     Success = true,
                     SubscriptionGuid = guid,
                     Message = "Subscription stopped successfully"
-                });
+                };
             }
             catch (InvalidOperationException ex)
             {
                 logger.LogWarning(ex, "Attempted to stop non-existent subscription {SubscriptionGuid}", guid);
-                return Task.FromResult(new StopSubscriptionResponse
+                return new StopSubscriptionResponse
                 {
                     Success = false,
                     SubscriptionGuid = guid,
                     ErrorCode = ErrorCodes.SubscriptionNotFound,
                     Message = $"Subscription with ID {guid} was not found or has already been removed"
-                });
+                };
             }
+        }
+
+        private async Task RecordStoppedMetricsAsync(SubscriptionGroup subscription)
+        {
+            if (observableMetric == null)
+            {
+                return;
+            }
+
+            foreach (var webSocketUrl in GetMetricWebSocketUrls(subscription))
+            {
+                await observableMetric.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    new AtomicLong { Value = 1 },
+                    BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, subscription.Purpose, StoppedDisconnectType));
+            }
+        }
+
+        private static IEnumerable<string> GetMetricWebSocketUrls(SubscriptionGroup subscription)
+        {
+            foreach (var baseUrl in subscription.WebSocketUrls)
+            {
+                if (string.IsNullOrWhiteSpace(subscription.Format))
+                {
+                    yield return baseUrl;
+                    continue;
+                }
+
+                yield return $"{baseUrl}/{subscription.Format}";
+            }
+        }
+
+        private static Dictionary<string, string> BuildLifecycleMetricTags(Guid subscriptionId, string webSocketUrl, string? purpose, string disconnectType)
+        {
+            var tags = new Dictionary<string, string>
+            {
+                { "TopicGuid", subscriptionId.ToString() },
+                { "SubscriptionId", subscriptionId.ToString() },
+                { "WebSocketUrl", webSocketUrl },
+                { "DisconnectType", disconnectType }
+            };
+
+            if (!string.IsNullOrWhiteSpace(purpose))
+            {
+                tags["Purpose"] = purpose;
+            }
+
+            return tags;
         }
 
         public List<SubscriptionGroupView> GetActiveSubscriptions()

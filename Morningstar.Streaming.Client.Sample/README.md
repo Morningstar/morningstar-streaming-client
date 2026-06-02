@@ -223,11 +223,15 @@ services.Configure<EndpointConfig>(context.Configuration.GetSection("EndpointCon
 // Register example OAuth provider for your authentication
 services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 
-// Register all Morningstar Streaming Client services using the extension method
-services.AddStreamingServices();                
+// Optional: If you want to log out counters and latency, uncomment the following services. Otherwise, you can omit these or replace them with your own implementations.
+//services.AddTransient<ICounterLogger, CounterLogger>();
+//services.AddTransient<ILatencyLogger, LatencyLogger>();
 
-// If you want background counter logging, uncomment the following line:
-services.AddStreamingHostedServices();
+// Optional: If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
+//services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
+
+// Register all Morningstar Streaming Client services using the extension method
+services.AddStreamingServices();
 ```
 
 This adds the `CounterLogger` as a background service that logs metrics.
