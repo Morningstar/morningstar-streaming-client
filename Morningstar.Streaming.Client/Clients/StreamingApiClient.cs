@@ -82,6 +82,34 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         /// <summary>
+        /// Generic method to create a Level 2 stream with any request type and endpoint.
+        /// Consolidates the common logic for creating streams regardless of request type or endpoint.
+        /// </summary>
+        public async Task<StreamResponse> CreateL2StreamAsync<TRequest>(TRequest streamRequest, string endpointUrl) where TRequest : class
+        {
+            try
+            {
+                var headers = new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("Authorization", await tokenProvider.CreateBearerTokenAsync()),
+                    new KeyValuePair<string, string>("Accept", "application/json")
+                };
+
+                return await apiHelper.ProcessRequestAsync<StreamResponse>(
+                    endpointUrl,
+                    HttpMethod.Post,
+                    headers,
+                    streamRequest
+                );
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error when attempting to request L2 Stream.");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Subscribes to a WebSocket stream and signals when the connection is established.
         /// </summary>
         /// <param name="subscriptionId">Unique identifier for the subscription, used for logging and telemetry</param>

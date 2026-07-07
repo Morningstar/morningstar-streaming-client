@@ -37,8 +37,12 @@ class Program
         var host = CreateHostBuilder(args).Build();
         await host.StartAsync();
 
-        // Run the example
+        // Run the Level 1 example by default
         await RunExampleAsync(host.Services);
+
+        // If you want to run Level 2 instead, comment out the Level 1 line above
+        // and uncomment the line below.
+        //await RunExampleLevel2Async(host.Services);
 
         Console.WriteLine("Press any key to exit...");
         Console.ReadLine();
@@ -200,6 +204,108 @@ class Program
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while running the example");
+        }
+    }
+
+    static async Task RunExampleLevel2Async(IServiceProvider services)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        var canaryService = services.GetRequiredService<ICanaryService>();
+        var oAuthProvider = services.GetRequiredService<IOAuthProvider>();
+
+        try
+        {
+            Console.WriteLine("--- Example: Starting a Level 2 Subscription ---");
+            Console.WriteLine("To start a subscription, you need:");
+            Console.WriteLine("1. A valid access token from your authentication provider");
+            Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
+            Console.WriteLine("3. Investment identifiers to subscribe to");
+
+            var secret = await oAuthProvider.GetOAuthSecretAsync();
+            if (secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
+            {
+                Console.WriteLine("Invalid OAuth credentials. Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials.");
+                logger.LogWarning("Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials before running the Level 2 subscription example.");
+                return;
+            }
+
+            var subscriptionRequest = new StartSubscriptionRequest
+            {
+                Stream = new StreamRequest
+                {
+                    Investments = new List<Investments>
+                    {
+                        new Investments
+                        {
+                            IdType = "PerformanceId",
+                            Ids = new List<string> { "0P000090RG", "0P0000T29L" }
+                        }
+                    },
+                    EventTypes = new[]
+                    {
+                        EventTypes.MarketByPrice
+                    }
+                },
+                DurationSeconds = 120,
+                StreamingFormat = "json",
+                Purpose = "Streaming Client Sample Level 2"
+            };
+
+            logger.LogInformation("Starting Level 2 subscription...");
+            var response = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
+
+            if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                logger.LogInformation(
+                    "Level 2 subscription started successfully! GUID: {Guid}, Started: {StartedAt}, Expires: {ExpiresAt}",
+                    response.SubscriptionGuid,
+                    response.StartedAt,
+                    response.ExpiresAt);
+
+                var activeSubscriptions = canaryService.GetActiveSubscriptions();
+                logger.LogInformation("Active subscriptions: {Count}", activeSubscriptions.Count);
+
+                foreach (var sub in activeSubscriptions)
+                {
+                    logger.LogInformation(
+                        "Subscription {Guid}: Started at {StartedAt}, WebSocket URLs: {Count}",
+                        sub.Guid,
+                        sub.StartedAt,
+                        sub.WebSocketUrls.Count);
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(120));
+
+                if (response.SubscriptionGuid.HasValue)
+                {
+                    logger.LogInformation("Stopping Level 2 subscription...");
+                    var stopResult = await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
+
+                    if (stopResult.Success)
+                    {
+                        logger.LogInformation("Subscription stopped successfully: {Message}", stopResult.Message);
+                    }
+                    else
+                    {
+                        logger.LogError("Failed to stop subscription. Error: {ErrorCode}, Message: {Message}",
+                            stopResult.ErrorCode, stopResult.Message);
+                    }
+                }
+            }
+            else
+            {
+                logger.LogError(
+                    "Failed to start Level 2 subscription. Status: {StatusCode}, ErrorCode: {ErrorCode}, Message: {Message}",
+                    response.ApiResponse.StatusCode,
+                    response.ApiResponse.ErrorCode,
+                    response.ApiResponse.Message);
+            }
+
+            logger.LogInformation("Level 2 example completed successfully!");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while running the Level 2 example");
         }
     }
 }

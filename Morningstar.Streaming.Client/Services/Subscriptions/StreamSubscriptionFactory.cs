@@ -30,6 +30,13 @@ public class StreamSubscriptionFactory : IStreamSubscriptionFactory
             streamingApiClient.CreateL1StreamAsync(request.Stream, endpointUrl));
     }
 
+    public Task<StreamSubscriptionResult> CreateLevel2Async(StartSubscriptionRequest req)
+    {
+        var endpointUrl = $"{appConfig.StreamingApiBaseAddress}/{endpointConfig.Level2UrlAddress}";
+        return CreateInternalAsync(req, (request) =>
+            streamingApiClient.CreateL2StreamAsync(request.Stream, endpointUrl));
+    }
+
     /// <summary>
     /// Protected method for creating subscriptions with a custom stream API call.
     /// Derived classes can use this to implement alternative subscription mechanisms.

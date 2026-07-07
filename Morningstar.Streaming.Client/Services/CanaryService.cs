@@ -44,6 +44,19 @@ namespace Morningstar.Streaming.Client.Services
         public Task<StartSubscriptionResponse> StartLevel1SubscriptionAsync(StartSubscriptionRequest req)
             => StartLevel1SubscriptionInternalAsync(req, streamSubscriptionFactory.CreateAsync);
 
+        public Task<StartSubscriptionResponse> StartLevel2SubscriptionAsync(StartSubscriptionRequest req)
+            => StartLevel2SubscriptionInternalAsync(req, streamSubscriptionFactory.CreateLevel2Async);
+
+        /// <summary>
+        /// Protected method that handles the core Level 2 subscription logic.
+        /// This can be called by derived classes to implement additional Level 2 subscription methods.
+        /// </summary>
+        protected virtual Task<StartSubscriptionResponse> StartLevel2SubscriptionInternalAsync<TRequest>(
+            TRequest req,
+            Func<TRequest, Task<StreamSubscriptionResult>> createFunc)
+            where TRequest : SubscriptionBaseRequest
+            => StartLevel1SubscriptionInternalAsync(req, createFunc);
+
         /// <summary>
         /// Protected method that handles the core subscription logic.
         /// This can be called by derived classes to implement additional subscription methods.
