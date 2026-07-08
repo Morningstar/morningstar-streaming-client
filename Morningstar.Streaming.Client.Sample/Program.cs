@@ -38,11 +38,11 @@ class Program
         await host.StartAsync();
 
         // Run the Level 1 example by default
-        await RunExampleAsync(host.Services);
+        await RunLevel1ExampleAsync(host.Services);
 
         // If you want to run Level 2 instead, comment out the Level 1 line above
         // and uncomment the line below.
-        //await RunExampleLevel2Async(host.Services);
+        //await RunLevel2ExampleAsync(host.Services);
 
         Console.WriteLine("Press any key to exit...");
         Console.ReadLine();
@@ -81,7 +81,7 @@ class Program
     /// <summary>
     /// Demonstrates how to use the Canary service to create and manage subscriptions
     /// </summary>
-    static async Task RunExampleAsync(IServiceProvider services)
+    static async Task RunLevel1ExampleAsync(IServiceProvider services)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         var canaryService = services.GetRequiredService<ICanaryService>();
@@ -207,7 +207,7 @@ class Program
         }
     }
 
-    static async Task RunExampleLevel2Async(IServiceProvider services)
+    static async Task RunLevel2ExampleAsync(IServiceProvider services)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         var canaryService = services.GetRequiredService<ICanaryService>();
