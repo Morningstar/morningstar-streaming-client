@@ -9,6 +9,8 @@ This is a complete working example demonstrating how to use the **Morningstar.St
 - ✅ Registering Morningstar Streaming Client services
 - ✅ Working with the `ICanaryService` interface
 - ✅ Creating and managing Level 1 subscriptions
+ - ✅ Creating and managing Level 1 subscriptions
+ - ✅ Creating and managing Level 2 subscriptions
 - ✅ Proper logging with Serilog
 - ✅ Error handling best practices
 
@@ -33,7 +35,8 @@ Update the `appsettings.json` file with your actual Morningstar Streaming API co
     "LogMessagesPath": "logs"
   },
   "EndpointConfig": {
-    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
+    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1",
+    "Level2UrlAddress": "direct-web-services/v1/streaming/level-2"
   }
 }
 ```
@@ -200,10 +203,47 @@ var subscriptionRequest = new StartSubscriptionRequest
     };
 };
 
-var response = await canaryService.StartLevel1SubscriptionAsync(
-    accessToken, 
-    subscriptionRequest);
+var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
 ```
+
+### Creating Level 2 Subscriptions
+
+Level 2 subscriptions typically provide market-by-price/order-book data and are started with the Level 2 endpoint. The sample API and client support Level 2 by calling StartLevel2SubscriptionAsync. Level 2 responses commonly include only a "realtime" subscriptions array (which is fine — the domain models allow nullable Delayed lists).
+
+Example:
+
+```csharp
+var subscriptionRequestLevel2 = new StartSubscriptionRequest
+{
+    Stream = new StreamRequest
+    {
+        Investments = new List<Investments>
+        {
+            new Investments
+            {
+                IdType = "PerformanceId",
+                Ids = new List<string> { "0P000090RG", "0P0000T29L" }
+            }
+        },
+        EventTypes = new[] { EventTypes.MarketByPrice }
+    },
+    DurationSeconds = 300, // Run for 5 minutes
+};
+
+var responseLevel2 = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequestLevel2);
+```
+
+Note: Level 2 responses often look like:
+
+```json
+"subscriptions": {
+  "realtime": [
+    "wss://.../streaming/subscriptions/<guid>"
+  ]
+}
+```
+
+This is expected; the client model treats the `realtime` and `delayed` lists as optional, so returning only `realtime` is valid for Level 2.
 
 ### Processing WebSocket Messages
 

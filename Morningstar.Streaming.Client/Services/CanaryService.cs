@@ -252,15 +252,5 @@ namespace Morningstar.Streaming.Client.Services
                 Purpose = s.Purpose
             }).ToList();
         }
-
-        /// <summary>
-        /// Protected method for consuming WebSocket streams.
-        /// Can be used by derived classes for custom subscription implementations.
-        /// </summary>
-        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, string? purpose, SubscriptionGroup sub, bool logToFile, TaskCompletionSource<bool> connectedTcs, CancellationToken token)
-        {
-            var consumer = factory.Create(wsUrl, logToFile, purpose);
-            await consumer.StartConsumingAsync(connectedTcs, token);
-        }
     }
 }
