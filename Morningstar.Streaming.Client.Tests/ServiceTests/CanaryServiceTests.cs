@@ -552,5 +552,162 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             callSequence.Should().ContainInOrder("StartConsumingAsync", "TryAdd");
         }
+
+        [Fact]
+        public async Task StartLevel2SubscriptionAsync_WithSuccessfulResponse_ReturnsStartSubscriptionResponse()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60
+            };
+
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1", "wss://test.com/stream2" };
+            var expectedCancellationTokenSource = new CancellationTokenSource();
+
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = expectedWebSocketUrls,
+                CancellationTokenSource = expectedCancellationTokenSource
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateLevel2Async(request))
+                .ReturnsAsync(streamResult);
+
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            var result = await canaryService.StartLevel2SubscriptionAsync(request);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            result.SubscriptionGuid.Should().NotBeEmpty();
+            result.StartedAt.Should().NotBe(default);
+
+            mockStreamSubscriptionFactory.Verify(x => x.CreateLevel2Async(request), Times.Once);
+            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(It.IsAny<StartSubscriptionRequest>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task StartLevel2SubscriptionAsync_UsesCreateLevel2Async_NotCreateAsync()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest { DurationSeconds = 30 };
+
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                CancellationTokenSource = new CancellationTokenSource()
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateLevel2Async(request))
+                .ReturnsAsync(streamResult);
+
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            await canaryService.StartLevel2SubscriptionAsync(request);
+
+            // Assert
+            mockStreamSubscriptionFactory.Verify(x => x.CreateLevel2Async(request), Times.Once);
+            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(It.IsAny<StartSubscriptionRequest>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task StartLevel2SubscriptionAsync_WhenApiReturnsNonSuccess_ReturnsErrorResponse()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest { DurationSeconds = 60 };
+
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.Unauthorized },
+                WebSocketUrls = new List<string>(),
+                CancellationTokenSource = new CancellationTokenSource()
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateLevel2Async(request))
+                .ReturnsAsync(streamResult);
+
+            // Act
+            var result = await canaryService.StartLevel2SubscriptionAsync(request);
+
+            // Assert
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            result.SubscriptionGuid.Should().BeNull();
+            mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task StartLevel2SubscriptionAsync_AddsSubscriptionToManager()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest { DurationSeconds = 60 };
+
+            var streamResult = new StreamSubscriptionResult
+            {
+                ApiResponse = new StreamResponse { StatusCode = HttpStatusCode.OK },
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                CancellationTokenSource = new CancellationTokenSource()
+            };
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateLevel2Async(request))
+                .ReturnsAsync(streamResult);
+
+            SubscriptionGroup? addedGroup = null;
+            mockSubscriptionManager
+                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
+                .Callback<SubscriptionGroup>(g => addedGroup = g)
+                .Returns(true);
+
+            var mockConsumer = new Mock<IWebSocketConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
+                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
+                .Returns(Task.CompletedTask);
+
+            mockWebSocketConsumerFactory
+                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
+                .Returns(mockConsumer.Object);
+
+            // Act
+            var result = await canaryService.StartLevel2SubscriptionAsync(request);
+
+            // Assert
+            mockSubscriptionManager.Verify(x => x.TryAdd(It.IsAny<SubscriptionGroup>()), Times.Once);
+            addedGroup.Should().NotBeNull();
+            addedGroup!.Guid.Should().Be(result.SubscriptionGuid!.Value);
+        }
     }
 }

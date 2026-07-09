@@ -9,8 +9,7 @@ This is a complete working example demonstrating how to use the **Morningstar.St
 - ✅ Registering Morningstar Streaming Client services
 - ✅ Working with the `ICanaryService` interface
 - ✅ Creating and managing Level 1 subscriptions
- - ✅ Creating and managing Level 1 subscriptions
- - ✅ Creating and managing Level 2 subscriptions
+- ✅ Creating and managing Level 2 subscriptions
 - ✅ Proper logging with Serilog
 - ✅ Error handling best practices
 
@@ -48,6 +47,18 @@ dotnet build
 ```
 
 ### 3. Run the Application
+
+The sample runs **Level 1** by default. To switch to Level 2, change the `ExampleType` argument in `Main` inside `Program.cs`:
+
+```csharp
+// Run Level 1 (default)
+await RunExampleAsync(host.Services, ExampleType.Level1);
+
+// Run Level 2 instead — change to:
+await RunExampleAsync(host.Services, ExampleType.Level2);
+```
+
+Then run:
 
 ```bash
 dotnet run
@@ -162,45 +173,44 @@ public class ExampleOAuthProvider : IOAuthProvider
 
 #### Creating Subscriptions
 
-Example:
+The sample uses a single `RunExampleAsync` method with an `ExampleType` parameter to handle both Level 1 and Level 2. Example for Level 1:
 
 ```csharp
 var subscriptionRequest = new StartSubscriptionRequest
 {
-    var subscriptionRequest = new StartSubscriptionRequest
+    Stream = new StreamRequest
     {
-        Stream = new StreamRequest
+        Investments = new List<Investments>
         {
-            Investments = new List<Investments>
+            new Investments
             {
-                new Investments
-                { 
-                    IdType = "PerformanceId",
-                    Ids = new List<string> { "0P0000038R" }
-                }
-            },
-            EventTypes = new []
-            {
-                EventTypes.AggregateSummary,
-                EventTypes.Auction,
-                EventTypes.Close,
-                EventTypes.IndexTick,
-                EventTypes.InstrumentPerformanceStatistics,
-                EventTypes.LastPrice,
-                EventTypes.MidPrice,
-                EventTypes.NAVPrice,
-                EventTypes.OHLPrice,
-                EventTypes.SettlementPrice,
-                EventTypes.SpreadStatistics,
-                EventTypes.Status,
-                EventTypes.TopOfBook,
-                EventTypes.Trade,
-                EventTypes.TradeCancellation,
-                EventTypes.TradeCorrection
+                IdType = "PerformanceId",
+                Ids = new List<string> { "0P0000038R" }
             }
         },
-        DurationSeconds = 300 // Run for 5 minutes
-    };
+        EventTypes = new[]
+        {
+            EventTypes.AggregateSummary,
+            EventTypes.Auction,
+            EventTypes.Close,
+            EventTypes.IndexTick,
+            EventTypes.InstrumentPerformanceStatistics,
+            EventTypes.LastPrice,
+            EventTypes.MidPrice,
+            EventTypes.NAVPrice,
+            EventTypes.OHLPrice,
+            EventTypes.SettlementPrice,
+            EventTypes.SpreadStatistics,
+            EventTypes.Status,
+            EventTypes.TopOfBook,
+            EventTypes.Trade,
+            EventTypes.TradeCancellation,
+            EventTypes.TradeCorrection
+        }
+    },
+    DurationSeconds = 300, // Run for 5 minutes
+    StreamingFormat = "avro",
+    Purpose = "Streaming Client Sample"
 };
 
 var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
@@ -208,12 +218,12 @@ var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequ
 
 ### Creating Level 2 Subscriptions
 
-Level 2 subscriptions typically provide market-by-price/order-book data and are started with the Level 2 endpoint. The sample API and client support Level 2 by calling StartLevel2SubscriptionAsync. Level 2 responses commonly include only a "realtime" subscriptions array (which is fine — the domain models allow nullable Delayed lists).
+Level 2 subscriptions provide market-by-price/order-book data via the Level 2 endpoint. To run Level 2 in the sample, change the `ExampleType` argument in `Main` to `ExampleType.Level2`. The same `RunExampleAsync` method handles both levels.
 
 Example:
 
 ```csharp
-var subscriptionRequestLevel2 = new StartSubscriptionRequest
+var subscriptionRequest = new StartSubscriptionRequest
 {
     Stream = new StreamRequest
     {
@@ -228,12 +238,14 @@ var subscriptionRequestLevel2 = new StartSubscriptionRequest
         EventTypes = new[] { EventTypes.MarketByPrice }
     },
     DurationSeconds = 300, // Run for 5 minutes
+    StreamingFormat = "avro",
+    Purpose = "Streaming Client Sample Level 2"
 };
 
-var responseLevel2 = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequestLevel2);
+var response = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
 ```
 
-Note: Level 2 responses often look like:
+Note: Level 2 responses only include a `realtime` subscriptions array. The `delayed` array is empty:
 
 ```json
 "subscriptions": {
@@ -242,8 +254,6 @@ Note: Level 2 responses often look like:
   ]
 }
 ```
-
-This is expected; the client model treats the `realtime` and `delayed` lists as optional, so returning only `realtime` is valid for Level 2.
 
 ### Processing WebSocket Messages
 
@@ -296,7 +306,7 @@ streamRequest = new StreamRequest
 
 ### 2. Request Multiple Event Types
 ```csharp
-EventTypes = new []
+EventTypes = new[]
 {
     EventTypes.AggregateSummary,
     EventTypes.Auction,
@@ -317,7 +327,7 @@ EventTypes = new []
 }
 ```
 
-### 2. Long-Running Subscriptions
+### 3. Long-Running Subscriptions
 
 ```csharp
 var request = new StartSubscriptionRequest
@@ -327,11 +337,11 @@ var request = new StartSubscriptionRequest
 };
 ```
 
-### 3. Managing Multiple Subscriptions
+### 4. Managing Multiple Subscriptions
 
 ```csharp
-var sub1 = await canaryService.StartLevel1SubscriptionAsync(token, request1);
-var sub2 = await canaryService.StartLevel1SubscriptionAsync(token, request2);
+var sub1 = await canaryService.StartLevel1SubscriptionAsync(request1);
+var sub2 = await canaryService.StartLevel1SubscriptionAsync(request2);
 
 // Check all active subscriptions
 var active = canaryService.GetActiveSubscriptions();

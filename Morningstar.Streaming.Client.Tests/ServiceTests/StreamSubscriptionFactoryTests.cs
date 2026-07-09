@@ -37,7 +37,8 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockEndpointConfig.Setup(x => x.Value).Returns(new EndpointConfig
             {
                 Level1UrlAddress = "stream/level1",
-                Level1BypassUrlAddress = "stream/level1/bypass"
+                Level1BypassUrlAddress = "stream/level1/bypass",
+                Level2UrlAddress = "stream/level2"
             });
 
             // System Under Test
@@ -418,6 +419,178 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.PartialContent);
             result.WebSocketUrls.Should().HaveCount(1);
             result.ApiResponse.MetaData.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task CreateLevel2Async_WithSuccessfulResponse_ReturnsStreamSubscriptionResult()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60,
+                Stream = new StreamRequest
+                {
+                    Investments = new List<Investments>
+                    {
+                        new Investments { IdType = "PerformanceId", Ids = new List<string> { "0P000090RG" } }
+                    },
+                    EventTypes = new[] { "MarketByPrice" }
+                }
+            };
+
+            var streamResponse = new StreamResponse
+            {
+                StatusCode = HttpStatusCode.OK,
+                Subscriptions = new Subscription
+                {
+                    Realtime = new List<string> { "wss://stream1.test.com", "wss://stream2.test.com" }
+                }
+            };
+
+            mockStreamingApiClient
+                .Setup(x => x.CreateL2StreamAsync(request.Stream, "https://api.test.com/stream/level2"))
+                .ReturnsAsync(streamResponse);
+
+            // Act
+            var result = await streamSubscriptionFactory.CreateLevel2Async(request);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.ApiResponse.Should().Be(streamResponse);
+            result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            result.WebSocketUrls.Should().HaveCount(2);
+            result.WebSocketUrls.Should().Contain("wss://stream1.test.com");
+            result.WebSocketUrls.Should().Contain("wss://stream2.test.com");
+            result.CancellationTokenSource.Should().NotBeNull();
+
+            mockStreamingApiClient.Verify(
+                x => x.CreateL2StreamAsync(request.Stream, "https://api.test.com/stream/level2"),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateLevel2Async_UsesCorrectLevel2EndpointUrl()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                Stream = new StreamRequest
+                {
+                    Investments = new List<Investments>
+                    {
+                        new Investments { IdType = "PerformanceId", Ids = new List<string> { "0P000090RG" } }
+                    },
+                    EventTypes = new[] { "MarketByPrice" }
+                }
+            };
+
+            var streamResponse = new StreamResponse
+            {
+                StatusCode = HttpStatusCode.OK,
+                Subscriptions = new Subscription
+                {
+                    Realtime = new List<string> { "wss://stream.test.com" }
+                }
+            };
+
+            string? capturedUrl = null;
+
+            mockStreamingApiClient
+                .Setup(x => x.CreateL2StreamAsync(It.IsAny<StreamRequest>(), It.IsAny<string>()))
+                .Callback<StreamRequest, string>((req, url) => capturedUrl = url)
+                .ReturnsAsync(streamResponse);
+
+            // Act
+            await streamSubscriptionFactory.CreateLevel2Async(request);
+
+            // Assert
+            capturedUrl.Should().Be("https://api.test.com/stream/level2");
+        }
+
+        [Fact]
+        public async Task CreateLevel2Async_WithRealtimeUrlsOnly_ReturnsOnlyRealtimeUrls()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60,
+                Stream = new StreamRequest
+                {
+                    Investments = new List<Investments>
+                    {
+                        new Investments { IdType = "PerformanceId", Ids = new List<string> { "0P000090RG" } }
+                    },
+                    EventTypes = new[] { "MarketByPrice" }
+                }
+            };
+
+            var streamResponse = new StreamResponse
+            {
+                StatusCode = HttpStatusCode.OK,
+                Subscriptions = new Subscription
+                {
+                    Realtime = new List<string> { "wss://realtime.test.com" },
+                    Delayed = null
+                }
+            };
+
+            mockStreamingApiClient
+                .Setup(x => x.CreateL2StreamAsync(It.IsAny<StreamRequest>(), It.IsAny<string>()))
+                .ReturnsAsync(streamResponse);
+
+            // Act
+            var result = await streamSubscriptionFactory.CreateLevel2Async(request);
+
+            // Assert
+            result.WebSocketUrls.Should().HaveCount(1);
+            result.WebSocketUrls.Should().Contain("wss://realtime.test.com");
+        }
+
+        [Fact]
+        public async Task CreateLevel2Async_PassesStreamRequestToApiClient()
+        {
+            // Arrange
+            var expectedInvestments = new List<Investments>
+            {
+                new Investments { IdType = "PerformanceId", Ids = new List<string> { "0P000090RG", "0P0000T29L" } }
+            };
+
+            var expectedEventTypes = new[] { "MarketByPrice" };
+
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 120,
+                Stream = new StreamRequest
+                {
+                    Investments = expectedInvestments,
+                    EventTypes = expectedEventTypes
+                }
+            };
+
+            var streamResponse = new StreamResponse
+            {
+                StatusCode = HttpStatusCode.OK,
+                Subscriptions = new Subscription
+                {
+                    Realtime = new List<string> { "wss://stream.test.com" }
+                }
+            };
+
+            StreamRequest? capturedStreamRequest = null;
+
+            mockStreamingApiClient
+                .Setup(x => x.CreateL2StreamAsync(It.IsAny<StreamRequest>(), It.IsAny<string>()))
+                .Callback<StreamRequest, string>((req, url) => capturedStreamRequest = req)
+                .ReturnsAsync(streamResponse);
+
+            // Act
+            await streamSubscriptionFactory.CreateLevel2Async(request);
+
+            // Assert
+            capturedStreamRequest.Should().NotBeNull();
+            capturedStreamRequest.Should().BeSameAs(request.Stream);
+            capturedStreamRequest!.Investments.Should().BeEquivalentTo(expectedInvestments);
+            capturedStreamRequest.EventTypes.Should().BeEquivalentTo(expectedEventTypes);
         }
     }
 }

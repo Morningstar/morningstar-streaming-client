@@ -37,12 +37,8 @@ class Program
         var host = CreateHostBuilder(args).Build();
         await host.StartAsync();
 
-        // Run the Level 1 example by default
-        await RunLevel1ExampleAsync(host.Services);
-
-        // If you want to run Level 2 instead, comment out the Level 1 line above
-        // and uncomment the line below.
-        //await RunLevel2ExampleAsync(host.Services);
+        // Run the Level 1 example by default. To run Level 2, change the ExampleType argument to ExampleType.Level2 in the call below.
+        await RunExampleAsync(host.Services, ExampleType.Level1);
 
         Console.WriteLine("Press any key to exit...");
         Console.ReadLine();
@@ -81,7 +77,7 @@ class Program
     /// <summary>
     /// Demonstrates how to use the Canary service to create and manage subscriptions
     /// </summary>
-    static async Task RunLevel1ExampleAsync(IServiceProvider services)
+    static async Task RunExampleAsync(IServiceProvider services, ExampleType exampleType)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         var canaryService = services.GetRequiredService<ICanaryService>();
@@ -89,12 +85,9 @@ class Program
 
         try
         {
+            var isLevel1 = exampleType == ExampleType.Level1;
 
-            // Example: Start a new Level 1 subscription
-            // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
-            // This is just a demonstration of the Streaming API Subscription functionality            
-
-            Console.WriteLine("--- Example: Starting a Level 1 Subscription ---");
+            Console.WriteLine(isLevel1 ? "--- Example: Starting a Level 1 Subscription ---" : "--- Example: Starting a Level 2 Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
             Console.WriteLine("1. A valid access token from your authentication provider");
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
@@ -119,36 +112,43 @@ class Program
                         new Investments
                         {
                             IdType = "PerformanceId",
-                            Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                            Ids = isLevel1
+                                ? new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                                : new List<string> { "0P000090RG", "0P0000T29L" }
                         }
                     },
-                    EventTypes = new[]
-                    {
-                        EventTypes.AggregateSummary,
-                        EventTypes.Auction,
-                        EventTypes.Close,
-                        EventTypes.IndexTick,
-                        EventTypes.InstrumentPerformanceStatistics,
-                        EventTypes.LastPrice,
-                        EventTypes.MidPrice,
-                        EventTypes.NAVPrice,
-                        EventTypes.OHLPrice,
-                        EventTypes.SettlementPrice,
-                        EventTypes.SpreadStatistics,
-                        EventTypes.Status,
-                        EventTypes.TopOfBook,
-                        EventTypes.Trade,
-                        EventTypes.TradeCancellation,
-                        EventTypes.TradeCorrection
-                    }
+                    EventTypes = isLevel1
+                        ? new[]
+                        {
+                            EventTypes.AggregateSummary,
+                            EventTypes.Auction,
+                            EventTypes.Close,
+                            EventTypes.IndexTick,
+                            EventTypes.InstrumentPerformanceStatistics,
+                            EventTypes.LastPrice,
+                            EventTypes.MidPrice,
+                            EventTypes.NAVPrice,
+                            EventTypes.OHLPrice,
+                            EventTypes.SettlementPrice,
+                            EventTypes.SpreadStatistics,
+                            EventTypes.Status,
+                            EventTypes.TopOfBook,
+                            EventTypes.Trade,
+                            EventTypes.TradeCancellation,
+                            EventTypes.TradeCorrection
+                        }
+                        : new[]
+                        {
+                            EventTypes.MarketByPrice
+                        }
                 },
-                DurationSeconds = 120, // Run for 2 minutes
-                StreamingFormat = "avro", // Specify streaming format as json or avro
-                Purpose = "Streaming Client Sample" // Optional purpose string for uniquely identifying your feeds
+                DurationSeconds = 120,
+                StreamingFormat = isLevel1 ? "avro" : "json",
+                Purpose = isLevel1 ? "Streaming Client Sample" : "Streaming Client Sample Level 2"
             };
 
-            logger.LogInformation("Starting Level 1 subscription...");
-            var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
+            logger.LogInformation(isLevel1 ? "Starting Level 1 subscription..." : "Starting Level 2 subscription...");
+            var response = isLevel1 ? await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest) : await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
 
             if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
             {
@@ -207,105 +207,4 @@ class Program
         }
     }
 
-    static async Task RunLevel2ExampleAsync(IServiceProvider services)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        var canaryService = services.GetRequiredService<ICanaryService>();
-        var oAuthProvider = services.GetRequiredService<IOAuthProvider>();
-
-        try
-        {
-            Console.WriteLine("--- Example: Starting a Level 2 Subscription ---");
-            Console.WriteLine("To start a subscription, you need:");
-            Console.WriteLine("1. A valid access token from your authentication provider");
-            Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
-            Console.WriteLine("3. Investment identifiers to subscribe to");
-
-            var secret = await oAuthProvider.GetOAuthSecretAsync();
-            if (secret.UserName == "{YOUR_USERNAME}" || secret.Password == "{YOUR_PASSWORD}")
-            {
-                Console.WriteLine("Invalid OAuth credentials. Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials.");
-                logger.LogWarning("Please update the \\OAuthProvider\\ExampleOAuthProvider.cs file with valid credentials before running the Level 2 subscription example.");
-                return;
-            }
-
-            var subscriptionRequest = new StartSubscriptionRequest
-            {
-                Stream = new StreamRequest
-                {
-                    Investments = new List<Investments>
-                    {
-                        new Investments
-                        {
-                            IdType = "PerformanceId",
-                            Ids = new List<string> { "0P000090RG", "0P0000T29L" }
-                        }
-                    },
-                    EventTypes = new[]
-                    {
-                        EventTypes.MarketByPrice
-                    }
-                },
-                DurationSeconds = 120,
-                StreamingFormat = "json",
-                Purpose = "Streaming Client Sample Level 2"
-            };
-
-            logger.LogInformation("Starting Level 2 subscription...");
-            var response = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
-
-            if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
-            {
-                logger.LogInformation(
-                    "Level 2 subscription started successfully! GUID: {Guid}, Started: {StartedAt}, Expires: {ExpiresAt}",
-                    response.SubscriptionGuid,
-                    response.StartedAt,
-                    response.ExpiresAt);
-
-                var activeSubscriptions = canaryService.GetActiveSubscriptions();
-                logger.LogInformation("Active subscriptions: {Count}", activeSubscriptions.Count);
-
-                foreach (var sub in activeSubscriptions)
-                {
-                    logger.LogInformation(
-                        "Subscription {Guid}: Started at {StartedAt}, WebSocket URLs: {Count}",
-                        sub.Guid,
-                        sub.StartedAt,
-                        sub.WebSocketUrls.Count);
-                }
-
-                await Task.Delay(TimeSpan.FromSeconds(120));
-
-                if (response.SubscriptionGuid.HasValue)
-                {
-                    logger.LogInformation("Stopping Level 2 subscription...");
-                    var stopResult = await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
-
-                    if (stopResult.Success)
-                    {
-                        logger.LogInformation("Subscription stopped successfully: {Message}", stopResult.Message);
-                    }
-                    else
-                    {
-                        logger.LogError("Failed to stop subscription. Error: {ErrorCode}, Message: {Message}",
-                            stopResult.ErrorCode, stopResult.Message);
-                    }
-                }
-            }
-            else
-            {
-                logger.LogError(
-                    "Failed to start Level 2 subscription. Status: {StatusCode}, ErrorCode: {ErrorCode}, Message: {Message}",
-                    response.ApiResponse.StatusCode,
-                    response.ApiResponse.ErrorCode,
-                    response.ApiResponse.Message);
-            }
-
-            logger.LogInformation("Level 2 example completed successfully!");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "An error occurred while running the Level 2 example");
-        }
-    }
 }
