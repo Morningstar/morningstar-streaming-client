@@ -14,6 +14,7 @@ This library provides a reusable, framework-agnostic implementation for interact
 
 - ✅ **WebSocket-based real-time data streaming**
 - ✅ **Level 1 market data subscriptions**
+- ✅ **Level 2 market-by-price subscriptions**
 - ✅ **Subscription lifecycle management**
 - ✅ **Comprehensive logging support**
 - ✅ **Dependency injection ready**
@@ -97,7 +98,8 @@ Create an `appsettings.json` file with the following structure:
     "StreamingApiBaseAddress": "https://streaming.morningstar.com"
   },
   "EndpointConfig": {
-    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1"
+    "Level1UrlAddress": "direct-web-services/v1/streaming/level-1",
+    "Level2UrlAddress": "direct-web-services/v1/streaming/level-2"
   }
 }
 ```
@@ -147,23 +149,58 @@ var subscriptionRequest = new StartSubscriptionRequest
     DurationSeconds = 300 // Run for 5 minutes
 };
 
-// Start a subscription 
-var response = await canaryService.StartLevel1SubscriptionAsync(accessToken, subscriptionRequest);
+// Start a Level 1 subscription 
+var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
 
 if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
 {
     Console.WriteLine($"Subscription started! GUID: {response.SubscriptionGuid}");
-    
+
     // Get active subscriptions
     var activeSubscriptions = canaryService.GetActiveSubscriptions();
     Console.WriteLine($"Active subscriptions: {activeSubscriptions.Count}");
-    
+
     // Later: Stop the subscription
     if (response.SubscriptionGuid.HasValue)
     {
         await canaryService.StopSubscriptionAsync(response.SubscriptionGuid.Value);
     }
 }
+```
+
+## Subscription Types
+
+### Level 1 Subscriptions
+
+Level 1 provides core market data including aggregated summaries, trades, prices, and statistics.
+
+```csharp
+var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
+```
+
+### Level 2 Subscriptions
+
+Level 2 provides market-by-price (order book) data with detailed bid/ask levels and order book snapshots.
+
+```csharp
+var level2Request = new StartSubscriptionRequest
+{
+    Stream = new StreamRequest
+    {
+        Investments = new List<Investments>
+        {
+            new Investments
+            {
+                IdType = "PerformanceId",
+                Ids = new List<string> { "0P000090RG" }
+            }
+        },
+        EventTypes = new[] { EventTypes.MarketByPrice }
+    },
+    DurationSeconds = 300
+};
+
+var response = await canaryService.StartLevel2SubscriptionAsync(level2Request);
 ```
 
 ## Sample Applications
@@ -173,8 +210,10 @@ if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
 A complete working example is available in the `Morningstar.Streaming.Client.Sample` project. This demonstrates:
 - Setting up dependency injection
 - Configuring the application
-- Creating and managing subscriptions
+- Creating and managing Level 1 subscriptions
+- Creating and managing Level 2 subscriptions
 - Proper error handling and logging
+- Switching between Level 1 and Level 2 using the `ExampleType` parameter
 
 To run the console example:
 
@@ -190,6 +229,7 @@ dotnet run
 The main service for managing Morningstar Streaming API interactions:
 
 - `StartLevel1SubscriptionAsync()` - Start a new Level 1 subscription
+- `StartLevel2SubscriptionAsync()` - Start a new Level 2 subscription
 - `StopSubscriptionAsync()` - Stop an active subscription
 - `GetActiveSubscriptions()` - Get list of all active subscriptions
 
@@ -198,6 +238,7 @@ The main service for managing Morningstar Streaming API interactions:
 Low-level client for direct API communication:
 
 - `CreateL1StreamAsync()` - Create a Level 1 stream
+- `CreateL2StreamAsync()` - Create a Level 2 stream
 - `SubscribeAsync()` - Subscribe to WebSocket updates
 
 ### Supporting Services
