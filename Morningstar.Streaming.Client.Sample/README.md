@@ -245,13 +245,15 @@ var subscriptionRequest = new StartSubscriptionRequest
 var response = await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
 ```
 
-Note: Level 2 responses only include a `realtime` subscriptions array. The `delayed` array is empty:
+Note: Level 2 responses only include a `realtime` array. The `delayed` field is not present in the response:
 
 ```json
-"subscriptions": {
-  "realtime": [
-    "wss://.../streaming/subscriptions/<guid>"
-  ]
+{
+  "subscriptions": {
+    "realtime": [
+      "wss://.../streaming/subscriptions/<guid>"
+    ]
+  }
 }
 ```
 

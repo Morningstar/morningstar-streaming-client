@@ -86,8 +86,9 @@ class Program
         try
         {
             var isLevel1 = exampleType == ExampleType.Level1;
+            var subscriptionLevel = isLevel1 ? "Level 1" : "Level 2";
 
-            Console.WriteLine(isLevel1 ? "--- Example: Starting a Level 1 Subscription ---" : "--- Example: Starting a Level 2 Subscription ---");
+            Console.WriteLine($"--- Example: Starting a {subscriptionLevel} Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
             Console.WriteLine("1. A valid access token from your authentication provider");
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
@@ -165,8 +166,10 @@ class Program
                 };
             }
 
-            logger.LogInformation(isLevel1 ? "Starting Level 1 subscription..." : "Starting Level 2 subscription...");
-            var response = isLevel1 ? await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest) : await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
+            logger.LogInformation("Starting {Level} subscription...", subscriptionLevel);
+            var response = isLevel1
+                ? await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest)
+                : await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
 
             if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
             {
