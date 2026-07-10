@@ -22,8 +22,8 @@ namespace Morningstar.Streaming.Client.Services.AvroBinaryDeserializer
     public class AvroBinaryDeserializer : IAvroBinaryDeserializer
     {
 
-         private static class ReaderCache<TSpecificRecord>
-        where TSpecificRecord : class, ISpecificRecord, new()
+        private static class ReaderCache<TSpecificRecord>
+       where TSpecificRecord : class, ISpecificRecord, new()
         {
             public static Avro.Schema Schema { get; } = new TSpecificRecord().Schema;
 

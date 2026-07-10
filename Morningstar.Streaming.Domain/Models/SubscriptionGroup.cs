@@ -9,7 +9,7 @@ namespace Morningstar.Streaming.Domain.Models
         public required CancellationTokenSource CancellationTokenSource { get; set; }
         public string? Format { get; set; }
         public string? Purpose { get; set; }
-        
+
     }
 
     public class SubscriptionGroupView

@@ -47,12 +47,12 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
             var lastSegment = pathSegments.Length >= 1 ? pathSegments[^1] : string.Empty;
-            var topicGuidSegment = Guid.TryParse(lastSegment, out _) 
-                ? lastSegment 
+            var topicGuidSegment = Guid.TryParse(lastSegment, out _)
+                ? lastSegment
                 : pathSegments.Length >= 2 ? pathSegments[^2] : string.Empty;
             Guid.TryParse(topicGuidSegment, out var topicGuidResult);
             serializationFormat = Guid.TryParse(lastSegment, out _) ? string.Empty : lastSegment;
-            
+
             topicGuid = topicGuidResult;
             eventsLogger = wsLoggerFactory.GetLogger(topicGuid);
         }

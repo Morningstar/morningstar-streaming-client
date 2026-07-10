@@ -89,7 +89,7 @@ namespace Morningstar.Streaming.Client.Services
                     var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
-                    await connectedTcs.Task; 
+                    await connectedTcs.Task;
                     consumerTasks.Add(startTask);
                     succeededUrls.Add(url);
                 }

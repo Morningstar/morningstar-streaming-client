@@ -39,7 +39,7 @@ public class CounterLogger : ICounterLogger
         entry.Counter.Increment();
     }
 
-    
+
 
     public void Flush() => LogAndCleanup(null);
 

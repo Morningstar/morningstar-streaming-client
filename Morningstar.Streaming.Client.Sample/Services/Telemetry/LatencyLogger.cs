@@ -10,13 +10,13 @@ namespace Morningstar.Streaming.Client.Sample.Services.Telemetry;
 
 public class LatencyLogger : ILatencyLogger
 {
-   private readonly int maxLatencyMs = 15_000;
+    private readonly int maxLatencyMs = 15_000;
     private readonly int bucketSizeMs = 1;
     private const int OverflowBucketCount = 63;
     private readonly int bucketCount;
     private readonly long[] globalHistogram;
     private const string ClientSampleComponent = "ClientSample";
-    
+
 
     internal readonly ConcurrentDictionary<Guid, HistogramEntry> SubscriptionHistograms = new();
     internal readonly ConcurrentDictionary<string, HistogramEntry> ComponentHistograms = new();
@@ -406,7 +406,7 @@ public class LatencyLogger : ILatencyLogger
                 Purpose = purpose;
             }
 
-            SerializationFormat = serializationFormat;            
+            SerializationFormat = serializationFormat;
         }
 
         public void Touch() => LastUpdated = DateTime.UtcNow;

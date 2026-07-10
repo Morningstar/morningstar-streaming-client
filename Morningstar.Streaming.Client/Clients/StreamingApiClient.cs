@@ -369,8 +369,8 @@ namespace Morningstar.Streaming.Client.Clients
             var telemetryTask = TelemetryLoopAsync(
                 subscriptionId,
                 telemetryChannel.Reader,
-                counterLogger, 
-                latencyLogger, 
+                counterLogger,
+                latencyLogger,
                 shutdownCancellationToken);
 
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, shutdownCancellationTokenSource, shutdownCancellationToken);
@@ -423,7 +423,7 @@ namespace Morningstar.Streaming.Client.Clients
                 await IgnoreCancellationAsync(heartbeatTask);
             }
 
-                    return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
+            return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -564,7 +564,7 @@ namespace Morningstar.Streaming.Client.Clients
             Guid subscriptionId,
             ChannelReader<TelemetryItem> reader,
             ICounterLogger? counterLogger,
-            ILatencyLogger?  latencyLogger,
+            ILatencyLogger? latencyLogger,
             CancellationToken cancellationToken)
         {
             void Flush()
@@ -580,20 +580,20 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     while (reader.TryRead(out var item))
                     {
-                        
+
                         //process telemetry
-                       
+
                         counterLogger?.Increment(subscriptionId);
 
                         var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(item.jsonMessage);
 
-                        if(messagePacket == null)
+                        if (messagePacket == null)
                         {
                             logger.LogWarning("Failed to deserialize message for telemetry. Message: {Message}", item.jsonMessage);
                             continue;
                         }
 
-                        if(messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
+                        if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
                             var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
                             var latencyMillis = item.ReceivedAtMillis - publishTimeMillis;
@@ -601,7 +601,7 @@ namespace Morningstar.Streaming.Client.Clients
                             if (latencyMillis >= 0)
                             {
                                 latencyLogger?.RecordLatency(subscriptionId, latencyMillis);
-                            }                            
+                            }
                         }
 
                         var nowTick = Environment.TickCount64;
@@ -609,7 +609,7 @@ namespace Morningstar.Streaming.Client.Clients
                         {
                             Flush();
                             lastFlushTick = nowTick;
-                        }   
+                        }
                     }
                 }
             }
@@ -632,7 +632,7 @@ namespace Morningstar.Streaming.Client.Clients
                     logger.LogDebug(ex, "Failed to flush telemetry on shutdown for subscription {SubscriptionId}.", subscriptionId);
                 }
             }
-        }     
+        }
 
         private async Task StartHeartbeatMonitorAsync(
             ClientWebSocket ws,

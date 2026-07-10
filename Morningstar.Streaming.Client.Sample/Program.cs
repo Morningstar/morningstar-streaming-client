@@ -103,22 +103,22 @@ class Program
                 return;
             }
 
-            var subscriptionRequest = new StartSubscriptionRequest
+            StartSubscriptionRequest subscriptionRequest;
+            if (isLevel1)
             {
-                Stream = new StreamRequest
+                subscriptionRequest = new StartSubscriptionRequest
                 {
-                    Investments = new List<Investments>
+                    Stream = new StreamRequest
                     {
-                        new Investments
+                        Investments = new List<Investments>
                         {
-                            IdType = "PerformanceId",
-                            Ids = isLevel1
-                                ? new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
-                                : new List<string> { "0P000090RG", "0P0000T29L" }
-                        }
-                    },
-                    EventTypes = isLevel1
-                        ? new[]
+                            new Investments
+                            {
+                                IdType = "PerformanceId",
+                                Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                            }
+                        },
+                        EventTypes = new[]
                         {
                             EventTypes.AggregateSummary,
                             EventTypes.Auction,
@@ -137,15 +137,33 @@ class Program
                             EventTypes.TradeCancellation,
                             EventTypes.TradeCorrection
                         }
-                        : new[]
+                    },
+                    DurationSeconds = 120,
+                    StreamingFormat = "avro",
+                    Purpose = "Streaming Client Sample"
+                };
+            }
+            else
+            {
+                subscriptionRequest = new StartSubscriptionRequest
+                {
+                    Stream = new StreamRequest
+                    {
+                        Investments = new List<Investments>
                         {
-                            EventTypes.MarketByPrice
-                        }
-                },
-                DurationSeconds = 120,
-                StreamingFormat = isLevel1 ? "avro" : "json",
-                Purpose = isLevel1 ? "Streaming Client Sample" : "Streaming Client Sample Level 2"
-            };
+                            new Investments
+                            {
+                                IdType = "PerformanceId",
+                                Ids = new List<string> { "0P000090RG", "0P0000T29L" }
+                            }
+                        },
+                        EventTypes = new[] { EventTypes.MarketByPrice }
+                    },
+                    DurationSeconds = 120,
+                    StreamingFormat = "avro",
+                    Purpose = "Streaming Client Sample Level 2"
+                };
+            }
 
             logger.LogInformation(isLevel1 ? "Starting Level 1 subscription..." : "Starting Level 2 subscription...");
             var response = isLevel1 ? await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest) : await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
