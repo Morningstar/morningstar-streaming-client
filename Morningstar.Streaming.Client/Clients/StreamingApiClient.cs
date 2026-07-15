@@ -82,6 +82,34 @@ namespace Morningstar.Streaming.Client.Clients
         }
 
         /// <summary>
+        /// Generic method to create a Level 2 stream with any request type and endpoint.
+        /// Consolidates the common logic for creating streams regardless of request type or endpoint.
+        /// </summary>
+        public async Task<StreamResponse> CreateL2StreamAsync<TRequest>(TRequest streamRequest, string endpointUrl) where TRequest : class
+        {
+            try
+            {
+                var headers = new List<KeyValuePair<string, string>>
+                {
+                    new KeyValuePair<string, string>("Authorization", await tokenProvider.CreateBearerTokenAsync()),
+                    new KeyValuePair<string, string>("Accept", "application/json")
+                };
+
+                return await apiHelper.ProcessRequestAsync<StreamResponse>(
+                    endpointUrl,
+                    HttpMethod.Post,
+                    headers,
+                    streamRequest
+                );
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error when attempting to request L2 Stream.");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Subscribes to a WebSocket stream and signals when the connection is established.
         /// </summary>
         /// <param name="subscriptionId">Unique identifier for the subscription, used for logging and telemetry</param>
@@ -341,8 +369,8 @@ namespace Morningstar.Streaming.Client.Clients
             var telemetryTask = TelemetryLoopAsync(
                 subscriptionId,
                 telemetryChannel.Reader,
-                counterLogger, 
-                latencyLogger, 
+                counterLogger,
+                latencyLogger,
                 shutdownCancellationToken);
 
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, shutdownCancellationTokenSource, shutdownCancellationToken);
@@ -395,7 +423,7 @@ namespace Morningstar.Streaming.Client.Clients
                 await IgnoreCancellationAsync(heartbeatTask);
             }
 
-                    return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
+            return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -536,7 +564,7 @@ namespace Morningstar.Streaming.Client.Clients
             Guid subscriptionId,
             ChannelReader<TelemetryItem> reader,
             ICounterLogger? counterLogger,
-            ILatencyLogger?  latencyLogger,
+            ILatencyLogger? latencyLogger,
             CancellationToken cancellationToken)
         {
             void Flush()
@@ -552,20 +580,20 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     while (reader.TryRead(out var item))
                     {
-                        
+
                         //process telemetry
-                       
+
                         counterLogger?.Increment(subscriptionId);
 
                         var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(item.jsonMessage);
 
-                        if(messagePacket == null)
+                        if (messagePacket == null)
                         {
                             logger.LogWarning("Failed to deserialize message for telemetry. Message: {Message}", item.jsonMessage);
                             continue;
                         }
 
-                        if(messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
+                        if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
                             var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
                             var latencyMillis = item.ReceivedAtMillis - publishTimeMillis;
@@ -573,7 +601,7 @@ namespace Morningstar.Streaming.Client.Clients
                             if (latencyMillis >= 0)
                             {
                                 latencyLogger?.RecordLatency(subscriptionId, latencyMillis);
-                            }                            
+                            }
                         }
 
                         var nowTick = Environment.TickCount64;
@@ -581,7 +609,7 @@ namespace Morningstar.Streaming.Client.Clients
                         {
                             Flush();
                             lastFlushTick = nowTick;
-                        }   
+                        }
                     }
                 }
             }
@@ -604,7 +632,7 @@ namespace Morningstar.Streaming.Client.Clients
                     logger.LogDebug(ex, "Failed to flush telemetry on shutdown for subscription {SubscriptionId}.", subscriptionId);
                 }
             }
-        }     
+        }
 
         private async Task StartHeartbeatMonitorAsync(
             ClientWebSocket ws,

@@ -42,13 +42,16 @@ namespace Morningstar.Streaming.Client.Services
         }
 
         public Task<StartSubscriptionResponse> StartLevel1SubscriptionAsync(StartSubscriptionRequest req)
-            => StartLevel1SubscriptionInternalAsync(req, streamSubscriptionFactory.CreateAsync);
+            => StartSubscriptionCoreAsync(req, streamSubscriptionFactory.CreateAsync);
+
+        public Task<StartSubscriptionResponse> StartLevel2SubscriptionAsync(StartSubscriptionRequest req)
+            => StartSubscriptionCoreAsync(req, streamSubscriptionFactory.CreateLevel2Async);
 
         /// <summary>
         /// Protected method that handles the core subscription logic.
         /// This can be called by derived classes to implement additional subscription methods.
         /// </summary>
-        protected virtual async Task<StartSubscriptionResponse> StartLevel1SubscriptionInternalAsync<TRequest>(
+        protected virtual async Task<StartSubscriptionResponse> StartSubscriptionCoreAsync<TRequest>(
             TRequest req,
             Func<TRequest, Task<StreamSubscriptionResult>> createFunc)
             where TRequest : SubscriptionBaseRequest
@@ -86,7 +89,7 @@ namespace Morningstar.Streaming.Client.Services
                     var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
-                    await connectedTcs.Task; 
+                    await connectedTcs.Task;
                     consumerTasks.Add(startTask);
                     succeededUrls.Add(url);
                 }
@@ -248,16 +251,6 @@ namespace Morningstar.Streaming.Client.Services
                 Format = s.Format,
                 Purpose = s.Purpose
             }).ToList();
-        }
-
-        /// <summary>
-        /// Protected method for consuming WebSocket streams.
-        /// Can be used by derived classes for custom subscription implementations.
-        /// </summary>
-        protected virtual async Task ConsumeWebSocketStreamAsync(string wsUrl, string? purpose, SubscriptionGroup sub, bool logToFile, TaskCompletionSource<bool> connectedTcs, CancellationToken token)
-        {
-            var consumer = factory.Create(wsUrl, logToFile, purpose);
-            await consumer.StartConsumingAsync(connectedTcs, token);
         }
     }
 }

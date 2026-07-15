@@ -37,8 +37,8 @@ class Program
         var host = CreateHostBuilder(args).Build();
         await host.StartAsync();
 
-        // Run the example
-        await RunExampleAsync(host.Services);
+        // Run the Level 1 example by default. To run Level 2, change the ExampleType argument to ExampleType.Level2 in the call below.
+        await RunExampleAsync(host.Services, ExampleType.Level1);
 
         Console.WriteLine("Press any key to exit...");
         Console.ReadLine();
@@ -77,7 +77,7 @@ class Program
     /// <summary>
     /// Demonstrates how to use the Canary service to create and manage subscriptions
     /// </summary>
-    static async Task RunExampleAsync(IServiceProvider services)
+    static async Task RunExampleAsync(IServiceProvider services, ExampleType exampleType)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         var canaryService = services.GetRequiredService<ICanaryService>();
@@ -85,12 +85,10 @@ class Program
 
         try
         {
+            var isLevel1 = exampleType == ExampleType.Level1;
+            var subscriptionLevel = isLevel1 ? "Level 1" : "Level 2";
 
-            // Example: Start a new Level 1 subscription
-            // Note: You'll need to update the login credentials in Services\oAuthProvider\ExampleOAuthProvider.cs to get a valid access token for this to work
-            // This is just a demonstration of the Streaming API Subscription functionality            
-
-            Console.WriteLine("--- Example: Starting a Level 1 Subscription ---");
+            Console.WriteLine($"--- Example: Starting a {subscriptionLevel} Subscription ---");
             Console.WriteLine("To start a subscription, you need:");
             Console.WriteLine("1. A valid access token from your authentication provider");
             Console.WriteLine("2. A properly configured appsettings.json with API endpoints");
@@ -106,45 +104,72 @@ class Program
                 return;
             }
 
-            var subscriptionRequest = new StartSubscriptionRequest
+            StartSubscriptionRequest subscriptionRequest;
+            if (isLevel1)
             {
-                Stream = new StreamRequest
+                subscriptionRequest = new StartSubscriptionRequest
                 {
-                    Investments = new List<Investments>
+                    Stream = new StreamRequest
                     {
-                        new Investments
+                        Investments = new List<Investments>
                         {
-                            IdType = "PerformanceId",
-                            Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                            new Investments
+                            {
+                                IdType = "PerformanceId",
+                                Ids = new List<string> { "0P0000038R", "0P000003X1", "0P0001HD8R" }
+                            }
+                        },
+                        EventTypes = new[]
+                        {
+                            EventTypes.AggregateSummary,
+                            EventTypes.Auction,
+                            EventTypes.Close,
+                            EventTypes.IndexTick,
+                            EventTypes.InstrumentPerformanceStatistics,
+                            EventTypes.LastPrice,
+                            EventTypes.MidPrice,
+                            EventTypes.NAVPrice,
+                            EventTypes.OHLPrice,
+                            EventTypes.SettlementPrice,
+                            EventTypes.SpreadStatistics,
+                            EventTypes.Status,
+                            EventTypes.TopOfBook,
+                            EventTypes.Trade,
+                            EventTypes.TradeCancellation,
+                            EventTypes.TradeCorrection
                         }
                     },
-                    EventTypes = new[]
+                    DurationSeconds = 120,
+                    StreamingFormat = "avro",
+                    Purpose = "Streaming Client Sample"
+                };
+            }
+            else
+            {
+                subscriptionRequest = new StartSubscriptionRequest
+                {
+                    Stream = new StreamRequest
                     {
-                        EventTypes.AggregateSummary,
-                        EventTypes.Auction,
-                        EventTypes.Close,
-                        EventTypes.IndexTick,
-                        EventTypes.InstrumentPerformanceStatistics,
-                        EventTypes.LastPrice,
-                        EventTypes.MidPrice,
-                        EventTypes.NAVPrice,
-                        EventTypes.OHLPrice,
-                        EventTypes.SettlementPrice,
-                        EventTypes.SpreadStatistics,
-                        EventTypes.Status,
-                        EventTypes.TopOfBook,
-                        EventTypes.Trade,
-                        EventTypes.TradeCancellation,
-                        EventTypes.TradeCorrection
-                    }
-                },
-                DurationSeconds = 120, // Run for 2 minutes
-                StreamingFormat = "avro", // Specify streaming format as json or avro
-                Purpose = "Streaming Client Sample" // Optional purpose string for uniquely identifying your feeds
-            };
+                        Investments = new List<Investments>
+                        {
+                            new Investments
+                            {
+                                IdType = "PerformanceId",
+                                Ids = new List<string> { "0P000090RG", "0P0000T29L" }
+                            }
+                        },
+                        EventTypes = new[] { EventTypes.MarketByPrice }
+                    },
+                    DurationSeconds = 120,
+                    StreamingFormat = "avro",
+                    Purpose = "Streaming Client Sample Level 2"
+                };
+            }
 
-            logger.LogInformation("Starting Level 1 subscription...");
-            var response = await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest);
+            logger.LogInformation("Starting {Level} subscription...", subscriptionLevel);
+            var response = isLevel1
+                ? await canaryService.StartLevel1SubscriptionAsync(subscriptionRequest)
+                : await canaryService.StartLevel2SubscriptionAsync(subscriptionRequest);
 
             if (response.ApiResponse.StatusCode == System.Net.HttpStatusCode.OK)
             {
@@ -202,4 +227,5 @@ class Program
             logger.LogError(ex, "An error occurred while running the example");
         }
     }
+
 }

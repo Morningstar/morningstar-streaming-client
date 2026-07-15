@@ -12,6 +12,12 @@ namespace Morningstar.Streaming.Client.Clients
         Task<StreamResponse> CreateL1StreamAsync<TRequest>(TRequest streamRequest, string endpointUrl) where TRequest : class;
 
         /// <summary>
+        /// Generic method to create a Level 2 stream with any request type and endpoint.
+        /// This allows for flexible endpoint configuration without exposing specific implementation details.
+        /// </summary>
+        Task<StreamResponse> CreateL2StreamAsync<TRequest>(TRequest streamRequest, string endpointUrl) where TRequest : class;
+
+        /// <summary>
         /// Subscribes to a WebSocket stream for real-time market data.
         /// Automatically handles connection, reconnection (up to 3 attempts), heartbeat monitoring, and message processing.
         /// </summary>

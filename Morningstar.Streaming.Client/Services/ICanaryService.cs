@@ -24,6 +24,13 @@ namespace Morningstar.Streaming.Client.Services
         Task<StartSubscriptionResponse> StartLevel1SubscriptionAsync(StartSubscriptionRequest req);
 
         /// <summary>
+        /// Starts a new Level 2 market data subscription.
+        /// </summary>
+        /// <param name="req">The subscription request with investment identifiers</param>
+        /// <returns>Subscription response with GUID and WebSocket information</returns>
+        Task<StartSubscriptionResponse> StartLevel2SubscriptionAsync(StartSubscriptionRequest req);
+
+        /// <summary>
         /// Stops an active subscription by its GUID.
         /// </summary>
         /// <param name="guid">The unique identifier of the subscription to stop</param>
