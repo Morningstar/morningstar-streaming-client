@@ -116,7 +116,21 @@ namespace Morningstar.Streaming.Client.Services
             }
 
             // Add to subscriptionManager if at least one succeeded
-            subscriptionManager.TryAdd(sub);
+            if (!subscriptionManager.TryAdd(sub))
+            {
+                logger.LogError("Failed to add subscription {SubscriptionGuid} to the subscription manager; stopping started WebSocket consumers.", sub.Guid);
+
+                await sub.CancellationTokenSource.CancelAsync();
+
+                return new StartSubscriptionResponse
+                {
+                    ApiResponse = new StreamResponse
+                    {
+                        StatusCode = HttpStatusCode.InternalServerError,
+                        Message = "Failed to register the subscription."
+                    }
+                };
+            }
 
             // Start background task to monitor consumers and remove subscription when done
             _ = Task.Run(async () =>
@@ -172,6 +186,9 @@ namespace Morningstar.Streaming.Client.Services
                 var sub = subscriptionManager.Get(guid);
                 await RecordStoppedMetricsAsync(sub);
                 await sub.CancellationTokenSource.CancelAsync();
+
+                subscriptionManager.Remove(guid);
+
                 return new StopSubscriptionResponse
                 {
                     Success = true,
