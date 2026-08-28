@@ -16,6 +16,6 @@ public class SubscriptionGroupManager : ISubscriptionGroupManager
     public SubscriptionGroup Get(Guid guid) => subs.TryGetValue(guid, out var sub) ? sub : throw new InvalidOperationException($"Subscription does not exist {guid}");
 
     public List<SubscriptionGroup> Get() => subs.Values?.ToList() ?? new();
-    public void Remove(Guid guid) => subs.TryRemove(guid, out _);
+    public bool TryRemove(Guid guid, out SubscriptionGroup? sub) => subs.TryRemove(guid, out sub);
 }
 

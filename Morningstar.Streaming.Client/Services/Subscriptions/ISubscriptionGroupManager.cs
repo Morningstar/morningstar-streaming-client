@@ -6,6 +6,6 @@ public interface ISubscriptionGroupManager
 {
     bool TryAdd(SubscriptionGroup sub);
     SubscriptionGroup Get(Guid guid);
-    void Remove(Guid guid);
+    bool TryRemove(Guid guid, out SubscriptionGroup? sub);
     List<SubscriptionGroup> Get();
 }

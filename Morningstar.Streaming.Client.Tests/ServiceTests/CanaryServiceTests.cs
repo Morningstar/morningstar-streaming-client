@@ -11,10 +11,66 @@ using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
+using System.Collections.Concurrent;
 using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
+    /// <summary>
+    /// Wraps a real <see cref="SubscriptionGroupManager"/> so tests observe genuine add/remove/get
+    /// semantics (single source of truth, no duplicated in-memory tracking per test) while still
+    /// exposing call counts and completion signals for deterministic, interaction-style assertions
+    /// where needed. This lets tests verify actual state (e.g. "is it really gone?") instead of only
+    /// verifying that a method was invoked.
+    /// </summary>
+    internal sealed class RealSubscriptionGroupManager : ISubscriptionGroupManager
+    {
+        private readonly SubscriptionGroupManager inner = new();
+        private readonly ConcurrentDictionary<string, int> callCounts = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<Guid>> completionSignals = new();
+
+        public int CallCount(string methodName) => callCounts.GetValueOrDefault(methodName);
+
+        public Task<Guid> WaitForCallAsync(string methodName) =>
+            completionSignals.GetOrAdd(methodName, _ => new TaskCompletionSource<Guid>()).Task;
+
+        public bool TryAdd(SubscriptionGroup sub)
+        {
+            Record(nameof(TryAdd), sub.Guid);
+            return inner.TryAdd(sub);
+        }
+
+        public SubscriptionGroup Get(Guid guid)
+        {
+            Record(nameof(Get), guid);
+            return inner.Get(guid);
+        }
+
+        public List<SubscriptionGroup> Get()
+        {
+            Record(nameof(Get), Guid.Empty);
+            return inner.Get();
+        }
+
+        public bool TryRemove(Guid guid, out SubscriptionGroup? sub)
+        {
+            Record(nameof(TryRemove), guid);
+            var removed = inner.TryRemove(guid, out sub);
+            if (removed)
+            {
+                completionSignals.GetOrAdd(nameof(TryRemove), _ => new TaskCompletionSource<Guid>()).TrySetResult(guid);
+            }
+
+            return removed;
+        }
+
+        private void Record(string methodName, Guid guid)
+        {
+            callCounts.AddOrUpdate(methodName, 1, (_, count) => count + 1);
+            completionSignals.GetOrAdd(methodName, _ => new TaskCompletionSource<Guid>()).TrySetResult(guid);
+        }
+    }
+
     public class CanaryServiceTests
     {
         private readonly Mock<ISubscriptionGroupManager> mockSubscriptionManager;
@@ -331,7 +387,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var result = await sutWithLogging.StartLevel1SubscriptionAsync(request);
 
-            // Wait deterministically for the background consumer creation to complete.
             await Task.WhenAny(createdEvent.Task, Task.Delay(TimeSpan.FromSeconds(5)));
 
             // Assert
@@ -359,9 +414,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 Purpose = "Sample purpose"
             };
 
+            SubscriptionGroup? outSub = subscriptionGroup;
             mockSubscriptionManager
-                .Setup(x => x.Get(subscriptionGuid))
-                .Returns(subscriptionGroup);
+                .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
+                .Returns(true);
 
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
@@ -373,7 +429,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.Message.Should().Be("Subscription stopped successfully");
             result.ErrorCode.Should().BeNull();
             cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
-            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+            mockSubscriptionManager.Verify(x => x.TryRemove(subscriptionGuid, out outSub), Times.Once);
             mockObservableMetric.Verify(
                 x => x.RecordMetric(
                     MetricEvents.WebSocketDisconnections,
@@ -386,6 +442,221 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                         tags["DisconnectType"] == "Stopped" &&
                         tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
                 Times.Once);
+
+            Action accessTokenAfterStop = () => _ = cancellationTokenSource.Token;
+            accessTokenAfterStop.Should().Throw<ObjectDisposedException>("the CancellationTokenSource should be disposed once the subscription is genuinely removed");
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_WhenOneWebSocketUrlMetricFails_StillRecordsMetricsForRemainingUrls()
+        {
+            // Arrange
+            var subscriptionGuid = Guid.NewGuid();
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            var subscriptionGroup = new SubscriptionGroup
+            {
+                Guid = subscriptionGuid,
+                WebSocketUrls = new List<string> { "wss://test.com/stream1", "wss://test.com/stream2" },
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(60),
+                CancellationTokenSource = cancellationTokenSource,
+                Format = "avro",
+                Purpose = "Sample purpose"
+            };
+
+            SubscriptionGroup? outSub = subscriptionGroup;
+            mockSubscriptionManager
+                .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
+                .Returns(true);
+
+            mockObservableMetric
+                .Setup(x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream1/avro")))
+                .ThrowsAsync(new InvalidOperationException("Telemetry backend unavailable for stream1"));
+
+            mockObservableMetric
+                .Setup(x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream2/avro")))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
+
+            // Assert
+            result.Success.Should().BeTrue();
+
+            // The failing URL's metric was attempted...
+            mockObservableMetric.Verify(
+                x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
+                Times.Once);
+
+            // ...but the failure did not prevent the second URL's metric from still being recorded.
+            mockObservableMetric.Verify(
+                x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream2/avro")),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_WhenRecordMetricsThrows_StillCancelsAndRemovesSubscriptionAndReturnsSuccess()
+        {
+            // Arrange - use a real subscription manager so removal can be verified genuinely
+            var realSubscriptionManager = new SubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
+            var subscriptionGuid = Guid.NewGuid();
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            var subscriptionGroup = new SubscriptionGroup
+            {
+                Guid = subscriptionGuid,
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(60),
+                CancellationTokenSource = cancellationTokenSource,
+                Format = "avro",
+                Purpose = "Sample purpose"
+            };
+
+            realSubscriptionManager.TryAdd(subscriptionGroup).Should().BeTrue();
+
+            mockObservableMetric
+                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
+                .ThrowsAsync(new InvalidOperationException("Telemetry backend unavailable"));
+
+            // Act
+            var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
+
+            // Assert - cancellation and removal happen regardless of the metrics failure
+            result.Should().NotBeNull();
+            result.Success.Should().BeTrue();
+            result.SubscriptionGuid.Should().Be(subscriptionGuid);
+            result.Message.Should().Be("Subscription stopped successfully");
+            cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
+
+            // Assert - subscription is genuinely gone from the manager, not just that Remove was invoked
+            realSubscriptionManager.Get().Should().BeEmpty();
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_WhenCalledConcurrentlyForSameSubscription_OnlyOneCallSucceedsAndMetricsRecordedOnce()
+        {
+            // Arrange
+            var realSubscriptionManager = new SubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
+            var subscriptionGuid = Guid.NewGuid();
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            var subscriptionGroup = new SubscriptionGroup
+            {
+                Guid = subscriptionGuid,
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(60),
+                CancellationTokenSource = cancellationTokenSource,
+                Format = "avro",
+                Purpose = "Sample purpose"
+            };
+
+            realSubscriptionManager.TryAdd(subscriptionGroup).Should().BeTrue();
+
+            // Act
+            var stopTask1 = canaryService.StopSubscriptionAsync(subscriptionGuid);
+            var stopTask2 = canaryService.StopSubscriptionAsync(subscriptionGuid);
+            var results = await Task.WhenAll(stopTask1, stopTask2);
+
+            // Assert
+            results.Count(r => r.Success).Should().Be(1, "only one caller should be able to claim the subscription for cleanup");
+            results.Count(r => !r.Success).Should().Be(1, "the losing caller should be told the subscription was already removed");
+            results.Should().OnlyContain(r => r.SubscriptionGuid == subscriptionGuid);
+
+            var failedResult = results.Single(r => !r.Success);
+            failedResult.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
+
+            cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
+
+            // Assert
+            realSubscriptionManager.Get().Should().BeEmpty();
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
+            mockObservableMetric.Verify(
+                x => x.RecordMetric(
+                    MetricEvents.WebSocketDisconnections,
+                    It.IsAny<AtomicLong>(),
+                    It.IsAny<IDictionary<string, string>?>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task StopSubscriptionAsync_CancelsAndRemovesSubscriptionBeforeRecordingMetrics()
+        {
+            // Arrange - use a real subscription manager so removal can be verified genuinely
+            var realSubscriptionManager = new SubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
+            var subscriptionGuid = Guid.NewGuid();
+            var cancellationTokenSource = new CancellationTokenSource();
+
+            var subscriptionGroup = new SubscriptionGroup
+            {
+                Guid = subscriptionGuid,
+                WebSocketUrls = new List<string> { "wss://test.com/stream1" },
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddSeconds(60),
+                CancellationTokenSource = cancellationTokenSource,
+                Format = "avro",
+                Purpose = "Sample purpose"
+            };
+
+            realSubscriptionManager.TryAdd(subscriptionGroup).Should().BeTrue();
+
+            var callOrder = new List<string>();
+
+            mockObservableMetric
+                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
+                .Callback(() =>
+                {
+                    // Confirm the subscription is genuinely gone from the manager by the time metrics are recorded
+                    Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
+                    callOrder.Add("RecordMetric");
+                })
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await canaryService.StopSubscriptionAsync(subscriptionGuid);
+
+            // Assert - subscription is removed before metrics are recorded
+            callOrder.Should().Equal("RecordMetric");
+            realSubscriptionManager.Get().Should().BeEmpty();
         }
 
         [Fact]
@@ -394,9 +665,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Arrange
             var subscriptionGuid = Guid.NewGuid();
 
+            SubscriptionGroup? outSub = null;
             mockSubscriptionManager
-                .Setup(x => x.Get(subscriptionGuid))
-                .Throws(new InvalidOperationException($"Subscription does not exist {subscriptionGuid}"));
+                .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
+                .Returns(false);
 
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
@@ -407,7 +679,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.SubscriptionGuid.Should().Be(subscriptionGuid);
             result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
             result.Message.Should().Contain("not found");
-            mockSubscriptionManager.Verify(x => x.Get(subscriptionGuid), Times.Once);
+            mockSubscriptionManager.Verify(x => x.TryRemove(subscriptionGuid, out outSub), Times.Once);
             mockObservableMetric.Verify(
                 x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()),
                 Times.Never);
@@ -532,6 +804,15 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         public async Task StartLevel1SubscriptionAsync_WhenConsumerTaskFaults_RemovesSubscriptionFromManager()
         {
             // Arrange
+            var realSubscriptionManager = new RealSubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
             var request = new StartSubscriptionRequest
             {
                 DurationSeconds = 60
@@ -551,18 +832,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.CreateAsync(request))
                 .ReturnsAsync(streamResult);
 
-            mockSubscriptionManager
-                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Returns(true);
-
-            var removedEvent = new TaskCompletionSource<Guid>();
-            mockSubscriptionManager
-                .Setup(x => x.Remove(It.IsAny<Guid>()))
-                .Callback((Guid guid) => removedEvent.TrySetResult(guid));
-
-            // The consumer's "StartConsumingAsync" task represents the WebSocket connection.
-            // Once the connection is established (tcs is signaled), the returned task later
-            // faults to simulate a disconnection / streaming exception.
             var consumerTaskSource = new TaskCompletionSource();
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
@@ -577,24 +846,35 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
-            // Simulate the WebSocket consumer faulting (e.g. disconnection/exception).
+            realSubscriptionManager.Get(result.SubscriptionGuid!.Value).Should().NotBeNull();
+
             consumerTaskSource.SetException(new InvalidOperationException("Simulated disconnection"));
 
-            // Wait for the background monitoring task to observe the fault and remove the subscription.
-            var completedTask = await Task.WhenAny(removedEvent.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            var completedTask = await Task.WhenAny(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), Task.Delay(TimeSpan.FromSeconds(5)));
 
             // Assert
-            completedTask.Should().Be(removedEvent.Task, "the subscription should be removed from the manager after the consumer task faults");
-            var removedGuid = await removedEvent.Task;
+            completedTask.Should().Be(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), "the subscription should be removed from the manager after the consumer task faults");
+            var removedGuid = await realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove));
             removedGuid.Should().Be(result.SubscriptionGuid!.Value);
 
-            mockSubscriptionManager.Verify(x => x.Remove(result.SubscriptionGuid!.Value), Times.Once);
+            // Assert
+            realSubscriptionManager.Get().Should().BeEmpty();
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(result.SubscriptionGuid!.Value));
         }
 
         [Fact]
         public async Task StartLevel1SubscriptionAsync_WhenMultipleConsumerTasksFault_RemovesSubscriptionExactlyOnce()
         {
             // Arrange
+            var realSubscriptionManager = new RealSubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
             var request = new StartSubscriptionRequest
             {
                 DurationSeconds = 60
@@ -613,20 +893,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockStreamSubscriptionFactory
                 .Setup(x => x.CreateAsync(request))
                 .ReturnsAsync(streamResult);
-
-            mockSubscriptionManager
-                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Returns(true);
-
-            var removeCallCount = 0;
-            var removedEvent = new TaskCompletionSource<Guid>();
-            mockSubscriptionManager
-                .Setup(x => x.Remove(It.IsAny<Guid>()))
-                .Callback((Guid guid) =>
-                {
-                    Interlocked.Increment(ref removeCallCount);
-                    removedEvent.TrySetResult(guid);
-                });
 
             var consumerTaskSource1 = new TaskCompletionSource();
             var consumerTaskSource2 = new TaskCompletionSource();
@@ -650,27 +916,49 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
-            // Simulate both consumers faulting (e.g. simultaneous disconnections).
+            realSubscriptionManager.Get(result.SubscriptionGuid!.Value).Should().NotBeNull();
+
             consumerTaskSource1.SetException(new InvalidOperationException("Simulated disconnection 1"));
             consumerTaskSource2.SetException(new InvalidOperationException("Simulated disconnection 2"));
 
-            var completedTask = await Task.WhenAny(removedEvent.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            await Task.WhenAny(
+                Task.WhenAll(
+                    consumerTaskSource1.Task.ContinueWith(t => t.Exception, TaskContinuationOptions.OnlyOnFaulted),
+                    consumerTaskSource2.Task.ContinueWith(t => t.Exception, TaskContinuationOptions.OnlyOnFaulted)),
+                Task.Delay(TimeSpan.FromSeconds(5)));
+            consumerTaskSource1.Task.IsFaulted.Should().BeTrue("consumer 1's task should have faulted");
+            consumerTaskSource2.Task.IsFaulted.Should().BeTrue("consumer 2's task should have faulted");
+            consumerTaskSource1.Task.Exception!.InnerException!.Message.Should().Be("Simulated disconnection 1");
+            consumerTaskSource2.Task.Exception!.InnerException!.Message.Should().Be("Simulated disconnection 2");
+
+            var completedTask = await Task.WhenAny(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), Task.Delay(TimeSpan.FromSeconds(5)));
 
             // Assert
-            completedTask.Should().Be(removedEvent.Task, "the subscription should be removed after all consumer tasks fault");
-            var removedGuid = await removedEvent.Task;
+            completedTask.Should().Be(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), "the subscription should be removed after all consumer tasks fault");
+            var removedGuid = await realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove));
             removedGuid.Should().Be(result.SubscriptionGuid!.Value);
 
-            // Give a small grace period to ensure no duplicate Remove calls occur.
             await Task.Delay(TimeSpan.FromMilliseconds(200));
-            removeCallCount.Should().Be(1, "Remove should only be called once even when multiple consumer tasks fault");
-            mockSubscriptionManager.Verify(x => x.Remove(result.SubscriptionGuid!.Value), Times.Once);
+            realSubscriptionManager.CallCount(nameof(ISubscriptionGroupManager.TryRemove)).Should().Be(1, "TryRemove should only succeed once even when multiple consumer tasks fault");
+
+            // Assert
+            realSubscriptionManager.Get().Should().BeEmpty();
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(result.SubscriptionGuid!.Value));
         }
 
         [Fact]
         public async Task StartLevel1SubscriptionAsync_WhenConsumerTaskCompletesNormally_RemovesSubscriptionFromManager()
         {
-            // Arrange
+            // Arrange - use a real subscription manager so removal can be verified genuinely.
+            var realSubscriptionManager = new RealSubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
             var request = new StartSubscriptionRequest
             {
                 DurationSeconds = 60
@@ -690,15 +978,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.CreateAsync(request))
                 .ReturnsAsync(streamResult);
 
-            mockSubscriptionManager
-                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Returns(true);
-
-            var removedEvent = new TaskCompletionSource<Guid>();
-            mockSubscriptionManager
-                .Setup(x => x.Remove(It.IsAny<Guid>()))
-                .Callback((Guid guid) => removedEvent.TrySetResult(guid));
-
             var consumerTaskSource = new TaskCompletionSource();
             var mockConsumer = new Mock<IWebSocketConsumer>();
             mockConsumer
@@ -713,23 +992,35 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Act
             var result = await canaryService.StartLevel1SubscriptionAsync(request);
 
-            // Simulate the WebSocket consumer completing normally, without any error.
+            realSubscriptionManager.Get(result.SubscriptionGuid!.Value).Should().NotBeNull();
+
             consumerTaskSource.SetResult();
 
-            var completedTask = await Task.WhenAny(removedEvent.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            var completedTask = await Task.WhenAny(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), Task.Delay(TimeSpan.FromSeconds(5)));
 
             // Assert
-            completedTask.Should().Be(removedEvent.Task, "the subscription should be removed once the consumer task completes, even without a fault");
-            var removedGuid = await removedEvent.Task;
+            completedTask.Should().Be(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), "the subscription should be removed once the consumer task completes, even without a fault");
+            var removedGuid = await realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove));
             removedGuid.Should().Be(result.SubscriptionGuid!.Value);
 
-            mockSubscriptionManager.Verify(x => x.Remove(result.SubscriptionGuid!.Value), Times.Once);
+            // Assert
+            realSubscriptionManager.Get().Should().BeEmpty();
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(result.SubscriptionGuid!.Value));
         }
 
         [Fact]
         public async Task StartLevel1SubscriptionAsync_WhenOneOfMultipleSubscriptionsFaults_OnlyRemovesFaultedSubscription()
         {
             // Arrange
+            var realSubscriptionManager = new RealSubscriptionGroupManager();
+            var canaryService = new CanaryService(
+                realSubscriptionManager,
+                mockStreamSubscriptionFactory.Object,
+                mockWebSocketConsumerFactory.Object,
+                mockLogger.Object,
+                mockAppConfig.Object,
+                mockObservableMetric.Object);
+
             var request1 = new StartSubscriptionRequest { DurationSeconds = 60 };
             var request2 = new StartSubscriptionRequest { DurationSeconds = 60 };
 
@@ -754,47 +1045,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.CreateAsync(request2))
                 .ReturnsAsync(streamResult2);
 
-            var trackedSubscriptions = new List<SubscriptionGroup>();
-
-            mockSubscriptionManager
-                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Returns((SubscriptionGroup group) =>
-                {
-                    lock (trackedSubscriptions)
-                    {
-                        trackedSubscriptions.Add(group);
-                    }
-                    return true;
-                });
-
-            mockSubscriptionManager
-                .Setup(x => x.Get())
-                .Returns(() =>
-                {
-                    lock (trackedSubscriptions)
-                    {
-                        return trackedSubscriptions.ToList();
-                    }
-                });
-
-            var removedGuids = new List<Guid>();
-            var removedEvent = new TaskCompletionSource<Guid>();
-            mockSubscriptionManager
-                .Setup(x => x.Remove(It.IsAny<Guid>()))
-                .Callback((Guid guid) =>
-                {
-                    lock (trackedSubscriptions)
-                    {
-                        trackedSubscriptions.RemoveAll(s => s.Guid == guid);
-                    }
-                    lock (removedGuids)
-                    {
-                        removedGuids.Add(guid);
-                    }
-                    removedEvent.TrySetResult(guid);
-                });
-
-            // Consumer for subscription 1 will fault; consumer for subscription 2 stays pending (healthy).
             var faultingConsumerTaskSource = new TaskCompletionSource();
             var healthyConsumerTaskSource = new TaskCompletionSource();
 
@@ -821,29 +1071,28 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var result1 = await canaryService.StartLevel1SubscriptionAsync(request1);
             var result2 = await canaryService.StartLevel1SubscriptionAsync(request2);
 
-            // Simulate a disconnection/exception only for the first subscription's consumer.
+            realSubscriptionManager.Get().Should().HaveCount(2);
+
             faultingConsumerTaskSource.SetException(new InvalidOperationException("Simulated disconnection"));
 
-            var completedTask = await Task.WhenAny(removedEvent.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            var completedTask = await Task.WhenAny(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), Task.Delay(TimeSpan.FromSeconds(5)));
 
             // Assert
-            completedTask.Should().Be(removedEvent.Task, "the faulted subscription should be removed");
+            completedTask.Should().Be(realSubscriptionManager.WaitForCallAsync(nameof(ISubscriptionGroupManager.TryRemove)), "the faulted subscription should be removed");
 
-            // Give a small grace period to ensure the healthy subscription is not also removed.
             await Task.Delay(TimeSpan.FromMilliseconds(200));
 
-            removedGuids.Should().ContainSingle().Which.Should().Be(result1.SubscriptionGuid!.Value);
-            mockSubscriptionManager.Verify(x => x.Remove(result1.SubscriptionGuid!.Value), Times.Once);
-            mockSubscriptionManager.Verify(x => x.Remove(result2.SubscriptionGuid!.Value), Times.Never);
+            realSubscriptionManager.CallCount(nameof(ISubscriptionGroupManager.TryRemove)).Should().Be(1, "only the faulted subscription should be removed");
 
-            // Validate against the real public API: the faulted subscription's id should
-            // no longer be present in the manager, while the healthy one should still be active.
             var activeSubscriptions = canaryService.GetActiveSubscriptions();
             activeSubscriptions.Should().HaveCount(1, "only the healthy subscription should remain after the faulted one is removed");
             activeSubscriptions.Select(s => s.Guid).Should().NotContain(result1.SubscriptionGuid!.Value);
             activeSubscriptions.Single().Guid.Should().Be(result2.SubscriptionGuid!.Value);
 
-            // Cleanup: complete the healthy consumer task so its background monitoring task doesn't linger.
+            // Assert
+            Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(result1.SubscriptionGuid!.Value));
+            realSubscriptionManager.Get(result2.SubscriptionGuid!.Value).Should().NotBeNull();
+
             healthyConsumerTaskSource.SetResult();
         }
 
@@ -882,28 +1131,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.SubscriptionGuid.Should().NotBeEmpty();
             result.StartedAt.Should().NotBe(default);
 
-            mockStreamSubscriptionFactory.Verify(x => x.CreateLevel2Async(request), Times.Once);
-            mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(It.IsAny<StartSubscriptionRequest>()), Times.Never);
-        }
-
-        [Fact]
-        public async Task StartLevel2SubscriptionAsync_UsesCreateLevel2Async_NotCreateAsync()
-        {
-            // Arrange
-            var request = new StartSubscriptionRequest { DurationSeconds = 30 };
-            var streamResult = CreateStreamResult(HttpStatusCode.OK, new List<string> { "wss://test.com/stream1" });
-
-            mockStreamSubscriptionFactory
-                .Setup(x => x.CreateLevel2Async(request))
-                .ReturnsAsync(streamResult);
-
-            SetupTryAddSuccess();
-            SetupSuccessfulConsumer();
-
-            // Act
-            await canaryService.StartLevel2SubscriptionAsync(request);
-
-            // Assert
             mockStreamSubscriptionFactory.Verify(x => x.CreateLevel2Async(request), Times.Once);
             mockStreamSubscriptionFactory.Verify(x => x.CreateAsync(It.IsAny<StartSubscriptionRequest>()), Times.Never);
         }
@@ -966,10 +1193,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         public async Task StartLevel1SubscriptionAsync_WhenTryAddFails_ReturnsErrorAndSubscriptionDoesNotAppearInActiveSubscriptions()
         {
             // Arrange
-            // Simulates a Guid collision or any other rejection by the manager: TryAdd returns false,
-            // meaning the subscription was never actually stored.
             var request = new StartSubscriptionRequest { DurationSeconds = 60 };
-            var streamResult = CreateStreamResult(HttpStatusCode.OK, new List<string> { "wss://test.com/stream1" });
+            var cts = new CancellationTokenSource();
+            var streamResult = CreateStreamResult(HttpStatusCode.OK, new List<string> { "wss://test.com/stream1" }, cts);
 
             mockStreamSubscriptionFactory
                 .Setup(x => x.CreateAsync(request))
@@ -979,7 +1205,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
                 .Returns(false);
 
-            // GetActiveSubscriptions reflects whatever is actually tracked by the manager.
             mockSubscriptionManager
                 .Setup(x => x.Get())
                 .Returns(new List<SubscriptionGroup>());
@@ -991,73 +1216,12 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var activeSubscriptions = canaryService.GetActiveSubscriptions();
 
             // Assert
-            // The service now surfaces a failure response (instead of a misleading "success" with a
-            // SubscriptionGuid) when TryAdd fails, and GetActiveSubscriptions correctly shows no active
-            // subscriptions since it was never stored.
             result.SubscriptionGuid.Should().BeNull();
             result.ApiResponse.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
             activeSubscriptions.Should().BeEmpty("the subscription was never actually added to the manager");
-        }
 
-        [Fact]
-        public async Task StopSubscriptionAsync_WhenConsumerDoesNotHonorCancellation_SubscriptionIsRemovedFromActiveSubscriptionsImmediately()
-        {
-            // Arrange
-            // The manager is backed by an in-memory dictionary to mimic real Add/Get/Remove semantics.
-            // StopSubscriptionAsync should remove the subscription immediately, regardless of whether the
-            // consumer honors cancellation or the background monitor has had a chance to run.
-            var trackedSubscriptions = new Dictionary<Guid, SubscriptionGroup>();
-
-            mockSubscriptionManager
-                .Setup(x => x.TryAdd(It.IsAny<SubscriptionGroup>()))
-                .Returns((SubscriptionGroup g) => trackedSubscriptions.TryAdd(g.Guid, g));
-
-            mockSubscriptionManager
-                .Setup(x => x.Get())
-                .Returns(() => trackedSubscriptions.Values.ToList());
-
-            mockSubscriptionManager
-                .Setup(x => x.Get(It.IsAny<Guid>()))
-                .Returns((Guid guid) => trackedSubscriptions.TryGetValue(guid, out var g)
-                    ? g
-                    : throw new InvalidOperationException($"Subscription does not exist {guid}"));
-
-            mockSubscriptionManager
-                .Setup(x => x.Remove(It.IsAny<Guid>()))
-                .Callback((Guid guid) => trackedSubscriptions.Remove(guid));
-
-            var request = new StartSubscriptionRequest { DurationSeconds = 60 };
-            var streamResult = CreateStreamResult(HttpStatusCode.OK, new List<string> { "wss://test.com/stream1" });
-
-            mockStreamSubscriptionFactory
-                .Setup(x => x.CreateAsync(request))
-                .ReturnsAsync(streamResult);
-
-            // This consumer's task never completes, simulating a consumer that ignores the
-            // cancellation token requested by StopSubscriptionAsync.
-            var neverCompletingTask = new TaskCompletionSource();
-            var mockConsumer = new Mock<IWebSocketConsumer>();
-            mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<TaskCompletionSource<bool>>(), It.IsAny<CancellationToken>()))
-                .Callback((TaskCompletionSource<bool> tcs, CancellationToken _) => tcs.SetResult(true))
-                .Returns(neverCompletingTask.Task);
-
-            mockWebSocketConsumerFactory
-                .Setup(x => x.Create(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string?>()))
-                .Returns(mockConsumer.Object);
-
-            // Act
-            var startResult = await canaryService.StartLevel1SubscriptionAsync(request);
-            var stopResult = await canaryService.StopSubscriptionAsync(startResult.SubscriptionGuid!.Value);
-            var activeSubscriptions = canaryService.GetActiveSubscriptions();
-
-            // Assert
-            // StopSubscriptionAsync now removes the subscription from the manager immediately after
-            // cancelling the token, so it no longer appears as "active" even though the misbehaving
-            // consumer's task never actually completes.
-            stopResult.Success.Should().BeTrue();
-            activeSubscriptions.Should().NotContain(s => s.Guid == startResult.SubscriptionGuid!.Value,
-                "the subscription should be removed immediately on stop, without waiting for the consumer task to finish");
+            cts.IsCancellationRequested.Should().BeTrue();
+            Assert.Throws<ObjectDisposedException>(() => cts.Token);
         }
     }
 }

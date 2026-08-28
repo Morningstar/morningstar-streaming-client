@@ -179,7 +179,7 @@ public class StreamingStepDefinitions
 
         if (currentSubscriptionGuid != Guid.Empty)
         {
-            subscriptionManager.Remove(currentSubscriptionGuid);
+            subscriptionManager.TryRemove(currentSubscriptionGuid, out _);
         }
     }
 

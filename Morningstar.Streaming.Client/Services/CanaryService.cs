@@ -121,6 +121,7 @@ namespace Morningstar.Streaming.Client.Services
                 logger.LogError("Failed to add subscription {SubscriptionGuid} to the subscription manager; stopping started WebSocket consumers.", sub.Guid);
 
                 await sub.CancellationTokenSource.CancelAsync();
+                sub.CancellationTokenSource.Dispose();
 
                 return new StartSubscriptionResponse
                 {
@@ -145,8 +146,11 @@ namespace Morningstar.Streaming.Client.Services
                 }
                 finally
                 {
-                    subscriptionManager.Remove(sub.Guid);
-                    logger.LogInformation("Subscription {SubscriptionGuid} removed from manager after all consumers completed", sub.Guid);
+                    if (subscriptionManager.TryRemove(sub.Guid, out _))
+                    {
+                        logger.LogInformation("Subscription {SubscriptionGuid} removed from manager after all consumers completed", sub.Guid);
+                        sub.CancellationTokenSource.Dispose();
+                    }
                 }
             });
 
@@ -181,24 +185,9 @@ namespace Morningstar.Streaming.Client.Services
 
         public async Task<StopSubscriptionResponse> StopSubscriptionAsync(Guid guid)
         {
-            try
+            if (!subscriptionManager.TryRemove(guid, out var sub) || sub == null)
             {
-                var sub = subscriptionManager.Get(guid);
-                await RecordStoppedMetricsAsync(sub);
-                await sub.CancellationTokenSource.CancelAsync();
-
-                subscriptionManager.Remove(guid);
-
-                return new StopSubscriptionResponse
-                {
-                    Success = true,
-                    SubscriptionGuid = guid,
-                    Message = "Subscription stopped successfully"
-                };
-            }
-            catch (InvalidOperationException ex)
-            {
-                logger.LogWarning(ex, "Attempted to stop non-existent subscription {SubscriptionGuid}", guid);
+                logger.LogWarning("Attempted to stop non-existent subscription {SubscriptionGuid}", guid);
                 return new StopSubscriptionResponse
                 {
                     Success = false,
@@ -207,6 +196,28 @@ namespace Morningstar.Streaming.Client.Services
                     Message = $"Subscription with ID {guid} was not found or has already been removed"
                 };
             }
+
+            await sub.CancellationTokenSource.CancelAsync();
+
+            try
+            {
+                await RecordStoppedMetricsAsync(sub);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to record stopped metrics for subscription {SubscriptionGuid}", guid);
+            }
+            finally
+            {
+                sub.CancellationTokenSource.Dispose();
+            }
+
+            return new StopSubscriptionResponse
+            {
+                Success = true,
+                SubscriptionGuid = guid,
+                Message = "Subscription stopped successfully"
+            };
         }
 
         private async Task RecordStoppedMetricsAsync(SubscriptionGroup subscription)
@@ -218,10 +229,17 @@ namespace Morningstar.Streaming.Client.Services
 
             foreach (var webSocketUrl in GetMetricWebSocketUrls(subscription))
             {
-                await observableMetric.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    new AtomicLong { Value = 1 },
-                    BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, subscription.Purpose, StoppedDisconnectType));
+                try
+                {
+                    await observableMetric.RecordMetric(
+                        MetricEvents.WebSocketDisconnections,
+                        new AtomicLong { Value = 1 },
+                        BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, subscription.Purpose, StoppedDisconnectType));
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to record stopped metric for subscription {SubscriptionGuid} and WebSocket URL {WebSocketUrl}", subscription.Guid, webSocketUrl);
+                }
             }
         }
 
