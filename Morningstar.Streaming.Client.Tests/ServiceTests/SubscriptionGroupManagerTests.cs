@@ -189,7 +189,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             subscriptionGroupManager.TryAdd(subscription);
 
             // Act
-            subscriptionGroupManager.Remove(guid);
+            subscriptionGroupManager.TryRemove(guid, out _);
 
             // Assert
             var allSubscriptions = subscriptionGroupManager.Get();
@@ -203,7 +203,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             var nonExistentGuid = Guid.NewGuid();
 
             // Act
-            Action act = () => subscriptionGroupManager.Remove(nonExistentGuid);
+            Action act = () => subscriptionGroupManager.TryRemove(nonExistentGuid, out _);
 
             // Assert
             act.Should().NotThrow();
@@ -224,7 +224,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             };
 
             subscriptionGroupManager.TryAdd(subscription);
-            subscriptionGroupManager.Remove(guid);
+            subscriptionGroupManager.TryRemove(guid, out _);
 
             // Act
             Action act = () => subscriptionGroupManager.Get(guid);
@@ -302,7 +302,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             subscriptionGroupManager.TryAdd(subscription3);
 
             // Act
-            subscriptionGroupManager.Remove(guid2);
+            subscriptionGroupManager.TryRemove(guid2, out _);
 
             // Assert
             var remaining = subscriptionGroupManager.Get();
