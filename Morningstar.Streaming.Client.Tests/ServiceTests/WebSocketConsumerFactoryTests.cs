@@ -13,6 +13,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<IServiceProvider> mockServiceProvider;
         private readonly Mock<ICounterLogger> mockCounterLogger;
         private readonly Mock<ILatencyLogger> mockLatencyLogger;
+        private readonly Mock<ISequenceLogger> mockSequenceLogger;
         private readonly Mock<IWebSocketLoggerFactory> mockWsLoggerFactory;
         private readonly Mock<IStreamingApiClient> mockClient;
         private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
@@ -25,6 +26,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockServiceProvider = new Mock<IServiceProvider>();
             mockCounterLogger = new Mock<ICounterLogger>();
             mockLatencyLogger = new Mock<ILatencyLogger>();
+            mockSequenceLogger = new Mock<ISequenceLogger>();
             mockWsLoggerFactory = new Mock<IWebSocketLoggerFactory>();
             mockClient = new Mock<IStreamingApiClient>();
             mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
@@ -36,6 +38,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockServiceProvider
                 .Setup(x => x.GetService(typeof(ILatencyLogger)))
                 .Returns(mockLatencyLogger.Object);
+
+            mockServiceProvider
+                .Setup(x => x.GetService(typeof(ISequenceLogger)))
+                .Returns(mockSequenceLogger.Object);
 
             // Setup default WebSocketLoggerFactory behavior
             var mockEventsLogger = new Mock<ILogger>();
@@ -145,6 +151,20 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             result.Should().NotBeNull();
             result.Should().BeOfType<WebSocketConsumer>();
+        }
+
+        [Fact]
+        public void Create_ResolvesSequenceLogger_FromServiceProvider()
+        {
+            // Arrange
+            var wsUrl = "wss://test.com/stream/12345678-1234-1234-1234-123456789012";
+
+            // Act
+            var result = webSocketConsumerFactory.Create(wsUrl, true, null);
+
+            // Assert
+            result.Should().BeOfType<WebSocketConsumer>();
+            mockServiceProvider.Verify(x => x.GetService(typeof(ISequenceLogger)), Times.Once);
         }
 
         [Fact]
