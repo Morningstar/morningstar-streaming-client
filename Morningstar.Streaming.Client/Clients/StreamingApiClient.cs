@@ -604,6 +604,8 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
+                        NotifyIfMissingRequiredFields(item, messagePacket);
+
                         sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
 
                         if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
@@ -859,5 +861,12 @@ namespace Morningstar.Streaming.Client.Clients
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
+        {
+            if (!messagePacket.SequenceNumber.HasValue || string.IsNullOrEmpty(messagePacket.PerformanceId) || string.IsNullOrEmpty(messagePacket.EventType))
+            {
+                logger.LogWarning("Message missing required fields for telemetry sequence detection. Message: {Message}", item.jsonMessage);
+            }
+        }
     }
 }
