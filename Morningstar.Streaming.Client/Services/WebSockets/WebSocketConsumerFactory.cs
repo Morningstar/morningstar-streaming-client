@@ -47,8 +47,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         {
             var counterLogger = serviceProvider.GetService<ICounterLogger>();
             var latencyLogger = serviceProvider.GetService<ILatencyLogger>();
+            var sequenceLogger = serviceProvider.GetService<ISequenceLogger>();
 
-            return new WebSocketConsumer(counterLogger, latencyLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile, purpose);
+            return new WebSocketConsumer(counterLogger, latencyLogger, wsLoggerFactory, logger, client, observableMetric, wsUrl, logToFile, purpose, sequenceLogger);
         }
     }
 }

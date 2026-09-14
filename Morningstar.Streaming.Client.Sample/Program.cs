@@ -67,6 +67,10 @@ class Program
                 //services.AddTransient<ICounterLogger, CounterLogger>();
                 //services.AddTransient<ILatencyLogger, LatencyLogger>();
 
+                // If you want to track message sequence integrity (out-of-order, duplicate, missing,
+                // recovered, expired), uncomment the following line or replace it with your own implementation:
+                //services.AddTransient<ISequenceLogger, SequenceLogger>();
+
                 // If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
                 //services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
 

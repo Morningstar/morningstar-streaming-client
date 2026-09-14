@@ -126,7 +126,7 @@ namespace Morningstar.Streaming.Client.Clients
             TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken = default)
         {
-            return SubscribeAsync(subscriptionId, webSocketUrl, purpose, onMessageAsync, connected, cancellationToken, null, null);
+            return SubscribeAsync(subscriptionId, webSocketUrl, purpose, onMessageAsync, connected, cancellationToken, null, null, null);
         }
 
         public async Task SubscribeAsync(
@@ -137,7 +137,8 @@ namespace Morningstar.Streaming.Client.Clients
             TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
-            ILatencyLogger? latencyLogger)
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger)
         {
             await ConnectWithRetryAsync(
                 subscriptionId,
@@ -147,6 +148,7 @@ namespace Morningstar.Streaming.Client.Clients
                 connected,
                 counterLogger,
                 latencyLogger,
+                sequenceLogger,
                 cancellationToken);
         }
 
@@ -158,6 +160,7 @@ namespace Morningstar.Streaming.Client.Clients
             TaskCompletionSource<bool> connected,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger,
             CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
@@ -183,7 +186,7 @@ namespace Morningstar.Streaming.Client.Clients
                     // Reset attempt counter after successful connection
                     attempt = 0;
 
-                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger);
+                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger);
 
                     if (!ShouldReconnect(receiveLoopResult, cancellationToken))
                     {
@@ -335,7 +338,8 @@ namespace Morningstar.Streaming.Client.Clients
             Func<string, Task> onMessageAsync,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
-            ILatencyLogger? latencyLogger)
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger)
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
@@ -371,6 +375,7 @@ namespace Morningstar.Streaming.Client.Clients
                 telemetryChannel.Reader,
                 counterLogger,
                 latencyLogger,
+                sequenceLogger,
                 shutdownCancellationToken);
 
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, shutdownCancellationTokenSource, shutdownCancellationToken);
@@ -565,12 +570,18 @@ namespace Morningstar.Streaming.Client.Clients
             ChannelReader<TelemetryItem> reader,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger,
             CancellationToken cancellationToken)
         {
+            var sequenceDetector = sequenceLogger != null
+                ? new SequenceGapDetector(subscriptionId, sequenceLogger)
+                : null;
+
             void Flush()
             {
                 latencyLogger?.Flush();
                 counterLogger?.Flush();
+                sequenceLogger?.Flush();
             }
             try
             {
@@ -593,6 +604,10 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
+                        NotifyIfMissingRequiredFields(item, messagePacket);
+
+                        sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+
                         if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
                             var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
@@ -607,6 +622,7 @@ namespace Morningstar.Streaming.Client.Clients
                         var nowTick = Environment.TickCount64;
                         if (nowTick - lastFlushTick >= FlushIntervalMillis)
                         {
+                            sequenceDetector?.Prune(nowTick);
                             Flush();
                             lastFlushTick = nowTick;
                         }
@@ -626,6 +642,7 @@ namespace Morningstar.Streaming.Client.Clients
                 try
                 {
                     Flush();
+                    sequenceDetector?.Clear();
                 }
                 catch (Exception ex)
                 {
@@ -844,5 +861,12 @@ namespace Morningstar.Streaming.Client.Clients
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
+        {
+            if (!messagePacket.SequenceNumber.HasValue || string.IsNullOrEmpty(messagePacket.PerformanceId) || string.IsNullOrEmpty(messagePacket.EventType))
+            {
+                logger.LogWarning("Message missing required fields for telemetry sequence detection. Message: {Message}", item.jsonMessage);
+            }
+        }
     }
 }
