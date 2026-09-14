@@ -138,7 +138,7 @@ namespace Morningstar.Streaming.Client.Clients
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
-            ISequenceLogger? sequenceLogger = null)
+            ISequenceLogger? sequenceLogger)
         {
             await ConnectWithRetryAsync(
                 subscriptionId,

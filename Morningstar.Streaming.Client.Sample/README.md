@@ -10,6 +10,7 @@ This is a complete working example demonstrating how to use the **Morningstar.St
 - ✅ Working with the `ICanaryService` interface
 - ✅ Creating and managing Level 1 subscriptions
 - ✅ Creating and managing Level 2 subscriptions
+- ✅ Optional telemetry: throughput, latency, and **message sequence integrity** logging
 - ✅ Proper logging with Serilog
 - ✅ Error handling best practices
 
@@ -279,6 +280,9 @@ services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 //services.AddTransient<ICounterLogger, CounterLogger>();
 //services.AddTransient<ILatencyLogger, LatencyLogger>();
 
+// Optional: If you want to track message sequence integrity (out-of-order, duplicate, missing, recovered, expired), uncomment the following line or replace it with your own implementation:
+//services.AddTransient<ISequenceLogger, SequenceLogger>();
+
 // Optional: If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
 //services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
 
@@ -287,6 +291,33 @@ services.AddStreamingServices();
 ```
 
 This adds the `CounterLogger` as a background service that logs metrics.
+
+### Tracking Message Sequence Integrity
+
+The client classifies every message against the last-seen sequence numbers for its
+`(PerformanceId, event type)` key and reports the result to an optional `ISequenceLogger`.
+The included `SequenceLogger` sample aggregates these classifications per subscription and, on
+each flush (driven by the client's telemetry loop), emits counter metrics and a summary log line.
+
+Register it via dependency injection to enable it:
+
+```csharp
+//services.AddTransient<ISequenceLogger, SequenceLogger>();
+```
+
+It emits the following counter metrics (meter name `SequenceLogger`), each tagged with
+`subscription_id`, `purpose`, and `format`:
+
+| Metric | Meaning |
+|---|---|
+| `messages_out_of_order_total` | Messages that arrived below the current high-water mark (late arrivals). |
+| `messages_duplicate_total` | Messages whose sequence number was already seen. |
+| `messages_missing_total` | Newly-detected skipped sequences (counted by gap size). |
+| `messages_recovered_total` | Late arrivals that filled a previously-missing sequence. |
+| `messages_missing_expired_total` | Gaps pruned unfilled, or arrivals older than the tracked window (by gap size). |
+| `messages_unclassified_total` | Messages lacking the sequence number, PerformanceId, or event type needed to classify. |
+
+Provide your own `ISequenceLogger` implementation to forward these to your own metrics backend.
 
 ## Common Use Cases
 
