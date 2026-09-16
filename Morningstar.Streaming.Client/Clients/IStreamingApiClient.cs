@@ -43,6 +43,7 @@ namespace Morningstar.Streaming.Client.Clients
             TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
-            ILatencyLogger? latencyLogger);
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger);
     }
 }

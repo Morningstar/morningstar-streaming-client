@@ -15,6 +15,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         private readonly ICounterLogger? counterLogger;
         private readonly ILatencyLogger? latencyLogger;
+        private readonly ISequenceLogger? sequenceLogger;
         private readonly ILogger eventsLogger;
         private readonly Channel<string> channel;
         private readonly Guid topicGuid;
@@ -30,7 +31,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             IObservableMetric<IMetric>? observableMetric,
             string wsUrl,
             bool logToFile,
-            string? purpose
+            string? purpose,
+            ISequenceLogger? sequenceLogger = null
         )
         {
             this.logger = logger;
@@ -40,6 +42,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.purpose = purpose;
             this.counterLogger = counterLogger;
             this.latencyLogger = latencyLogger;
+            this.sequenceLogger = sequenceLogger;
 
             channel = Channel.CreateUnbounded<string>();
 
@@ -61,6 +64,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         {
             counterLogger?.RegisterSubscription(topicGuid, Guid.Empty, serializationFormat, purpose);
             latencyLogger?.RegisterSubscription(topicGuid, serializationFormat, purpose);
+            sequenceLogger?.RegisterSubscription(topicGuid, serializationFormat, purpose);
             var logTask = LogFromChannelAsync(cancellationToken);
 
             try
@@ -81,7 +85,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     connectedTcs,
                     cancellationToken,
                     counterLogger,
-                    latencyLogger);
+                    latencyLogger,
+                    sequenceLogger);
 
                 if (!cancellationToken.IsCancellationRequested)
                 {
@@ -102,6 +107,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 await logTask;
                 counterLogger?.UnregisterSubscription(topicGuid);
                 latencyLogger?.UnregisterSubscription(topicGuid);
+                sequenceLogger?.UnregisterSubscription(topicGuid);
             }
         }
 
