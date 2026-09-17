@@ -604,7 +604,7 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
-                        if (!IsAdminMessage(messagePacket))
+                        if (!IsAdminMessage(messagePacket) && !IsSnapshotMessage(messagePacket))
                         {
                             NotifyIfMissingRequiredFields(item, messagePacket);
                             sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
@@ -885,5 +885,9 @@ namespace Morningstar.Streaming.Client.Clients
         /// </summary>
         internal static bool IsAdminMessage(MessagePacketEnvelope messagePacket)
             => string.Equals(messagePacket.EventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase);
+
+        private bool IsSnapshotMessage(MessagePacketEnvelope messagePacket)
+            => string.Equals(messagePacket.EventType, EventTypes.Snapshot, StringComparison.OrdinalIgnoreCase);
+
     }
 }
