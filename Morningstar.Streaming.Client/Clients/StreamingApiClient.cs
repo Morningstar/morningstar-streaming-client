@@ -604,9 +604,10 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
-                        NotifyIfMissingRequiredFields(item, messagePacket);
-
-                        sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+                        if (ProcessMessageSequenceDetection(item, messagePacket))
+                        {
+                            sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+                        }
 
                         if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
@@ -861,12 +862,27 @@ namespace Morningstar.Streaming.Client.Clients
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
+        private bool ProcessMessageSequenceDetection(TelemetryItem item, MessagePacketEnvelope messagePacket)
         {
+            if (IsAdminMessage(messagePacket) || IsSnapshotMessage(messagePacket))
+            {
+                // Admin/control messages (e.g. disconnect notices) legitimately carry no
+                // PerformanceId or SequenceNumber; they are not subject to sequence tracking.
+                return false;
+            }
+
             if (!messagePacket.SequenceNumber.HasValue || string.IsNullOrEmpty(messagePacket.PerformanceId) || string.IsNullOrEmpty(messagePacket.EventType))
             {
                 logger.LogWarning("Message missing required fields for telemetry sequence detection. Message: {Message}", item.jsonMessage);
             }
+
+            return true;
         }
+
+        internal static bool IsAdminMessage(MessagePacketEnvelope messagePacket)
+            => string.Equals(messagePacket.EventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase);
+
+        internal static bool IsSnapshotMessage(MessagePacketEnvelope messagePacket)
+            => string.Equals(messagePacket.EventType, EventTypes.Snapshot, StringComparison.OrdinalIgnoreCase);
     }
 }
