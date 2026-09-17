@@ -866,7 +866,7 @@ namespace Morningstar.Streaming.Client.Clients
 
         private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
         {
-            if (IsAdminMessage(messagePacket))
+            if (IsAdminMessage(messagePacket) || IsSnapshotMessage(messagePacket))
             {
                 // Admin/control messages (e.g. disconnect notices) legitimately carry no
                 // PerformanceId or SequenceNumber; they are not subject to sequence tracking.
