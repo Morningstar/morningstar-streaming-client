@@ -604,6 +604,7 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
+
                         if (!IsAdminMessage(messagePacket) && !IsSnapshotMessage(messagePacket))
                         {
                             NotifyIfMissingRequiredFields(item, messagePacket);
