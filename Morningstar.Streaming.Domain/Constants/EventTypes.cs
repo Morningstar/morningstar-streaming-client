@@ -24,4 +24,5 @@ public static class EventTypes
     public const string HeartBeat = "HeartBeat";
     public const string Admin = "Admin";
     public const string HeartBeatAcknowledged = "HeartBeatAcknowledged";
+    public const string Snapshot = "Snapshot";
 }

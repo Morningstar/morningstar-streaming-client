@@ -10,6 +10,7 @@ using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
+using Newtonsoft.Json;
 using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ClientTests
@@ -342,6 +343,56 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var disconnectType = StreamingApiClient.GetUpdatedPendingDisconnectType("Unexpected", jsonMessage);
 
             disconnectType.Should().Be("Expected");
+        }
+
+        [Fact]
+        public void IsAdminMessage_WithAdminEnvelope_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(jsonMessage)!;
+
+            StreamingApiClient.IsAdminMessage(messagePacket).Should().BeTrue();
+        }
+
+        [Fact]
+        public void IsAdminMessage_WithAvroAdminEnvelope_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventTypes": ["Admin"],
+                                "Admin": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(jsonMessage)!;
+
+            StreamingApiClient.IsAdminMessage(messagePacket).Should().BeTrue();
+        }
+
+        [Fact]
+        public void IsAdminMessage_WithOrdinaryDataEnvelope_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Trade",
+                                "PerformanceId": "0P0000038R",
+                                "SequenceNumber": 42
+                            }
+                            """;
+
+            var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(jsonMessage)!;
+
+            StreamingApiClient.IsAdminMessage(messagePacket).Should().BeFalse();
         }
 
         [Fact]
