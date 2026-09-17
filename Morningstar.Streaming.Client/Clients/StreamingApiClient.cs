@@ -604,9 +604,11 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
-                        NotifyIfMissingRequiredFields(item, messagePacket);
-
-                        sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+                        if (!IsAdminMessage(messagePacket))
+                        {
+                            NotifyIfMissingRequiredFields(item, messagePacket);
+                            sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+                        }
 
                         if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
                         {
@@ -863,10 +865,25 @@ namespace Morningstar.Streaming.Client.Clients
 
         private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
         {
+            if (IsAdminMessage(messagePacket))
+            {
+                // Admin/control messages (e.g. disconnect notices) legitimately carry no
+                // PerformanceId or SequenceNumber; they are not subject to sequence tracking.
+                return;
+            }
+
             if (!messagePacket.SequenceNumber.HasValue || string.IsNullOrEmpty(messagePacket.PerformanceId) || string.IsNullOrEmpty(messagePacket.EventType))
             {
                 logger.LogWarning("Message missing required fields for telemetry sequence detection. Message: {Message}", item.jsonMessage);
             }
         }
+
+        /// <summary>
+        /// Admin/control messages (such as the server's disconnect notice) are not market-data
+        /// updates: they carry no PerformanceId or SequenceNumber and must be excluded from
+        /// sequence-integrity classification so they don't inflate the Unclassified metric.
+        /// </summary>
+        internal static bool IsAdminMessage(MessagePacketEnvelope messagePacket)
+            => string.Equals(messagePacket.EventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase);
     }
 }
