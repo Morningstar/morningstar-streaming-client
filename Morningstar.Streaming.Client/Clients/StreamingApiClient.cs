@@ -604,10 +604,8 @@ namespace Morningstar.Streaming.Client.Clients
                             continue;
                         }
 
-
-                        if (!IsAdminMessage(messagePacket) && !IsSnapshotMessage(messagePacket))
+                        if (ProcessMessageSequenceDetection(item, messagePacket))
                         {
-                            NotifyIfMissingRequiredFields(item, messagePacket);
                             sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
                         }
 
@@ -864,31 +862,27 @@ namespace Morningstar.Streaming.Client.Clients
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private void NotifyIfMissingRequiredFields(TelemetryItem item, MessagePacketEnvelope messagePacket)
+        private bool ProcessMessageSequenceDetection(TelemetryItem item, MessagePacketEnvelope messagePacket)
         {
             if (IsAdminMessage(messagePacket) || IsSnapshotMessage(messagePacket))
             {
                 // Admin/control messages (e.g. disconnect notices) legitimately carry no
                 // PerformanceId or SequenceNumber; they are not subject to sequence tracking.
-                return;
+                return false;
             }
 
             if (!messagePacket.SequenceNumber.HasValue || string.IsNullOrEmpty(messagePacket.PerformanceId) || string.IsNullOrEmpty(messagePacket.EventType))
             {
                 logger.LogWarning("Message missing required fields for telemetry sequence detection. Message: {Message}", item.jsonMessage);
             }
+
+            return true;
         }
 
-        /// <summary>
-        /// Admin/control messages (such as the server's disconnect notice) are not market-data
-        /// updates: they carry no PerformanceId or SequenceNumber and must be excluded from
-        /// sequence-integrity classification so they don't inflate the Unclassified metric.
-        /// </summary>
         internal static bool IsAdminMessage(MessagePacketEnvelope messagePacket)
             => string.Equals(messagePacket.EventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase);
 
-        private bool IsSnapshotMessage(MessagePacketEnvelope messagePacket)
+        internal static bool IsSnapshotMessage(MessagePacketEnvelope messagePacket)
             => string.Equals(messagePacket.EventType, EventTypes.Snapshot, StringComparison.OrdinalIgnoreCase);
-
     }
 }
