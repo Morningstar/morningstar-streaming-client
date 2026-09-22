@@ -1,5 +1,5 @@
-using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Client.Services.Telemetry;
+using Morningstar.Streaming.Domain;
 
 namespace Morningstar.Streaming.Client.Clients
 {
@@ -45,5 +45,34 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger);
+
+        /// <summary>
+        /// Overload that additionally supports proactive arbitration: reacting to an Admin/Disconnect
+        /// notice before the server closes the connection, and deliberately retiring a connection with
+        /// a graceful close instead of an abort.
+        /// </summary>
+        /// <param name="onDisconnectNoticeReceived">
+        /// Invoked once, as soon as an Admin/Disconnect notice is observed on the connection -
+        /// before the server actually closes it. Callers can use this to proactively establish a
+        /// replacement connection.
+        /// </param>
+        /// <param name="gracefulCloseToken">
+        /// When cancelled, the current connection is closed with a normal WebSocket close
+        /// handshake (instead of being aborted) and the subscription is not retried afterward.
+        /// Use this to retire a connection deliberately (e.g. after a replacement has taken over)
+        /// without affecting <paramref name="cancellationToken"/>, which still governs the whole subscription.
+        /// </param>
+        Task SubscribeAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            string? purpose,
+            Func<string, Task> onMessageAsync,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger,
+            Action onDisconnectNoticeReceived,
+            CancellationToken gracefulCloseToken);
     }
 }

@@ -1,3 +1,4 @@
+using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
 
@@ -10,6 +11,9 @@ namespace Morningstar.Streaming.Client.Services
     /// </summary>
     public interface ICanaryService
     {
+        /// <summary>Raised once per Admin/Disconnect arbitration handover, for any active subscription, with its outcome.</summary>
+        event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
+
         /// <summary>
         /// Gets all currently active subscriptions.
         /// </summary>

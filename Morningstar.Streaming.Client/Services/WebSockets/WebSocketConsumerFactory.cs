@@ -1,6 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Clients;
-using Microsoft.Extensions.DependencyInjection;
 using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Services.WebSockets

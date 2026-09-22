@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -5,13 +6,12 @@ using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
-using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Client.Services.Telemetry;
+using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
-using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ClientTests
 {
@@ -343,6 +343,122 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var disconnectType = StreamingApiClient.GetUpdatedPendingDisconnectType("Unexpected", jsonMessage);
 
             disconnectType.Should().Be("Expected");
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndArbitrateFalse_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": false
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndNoArbitrateField_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAvroAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventTypes": ["Admin"],
+                                "Admin": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAvroAdminDisconnectEnvelopeAndNoArbitrateField_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventTypes": ["Admin"],
+                                "Admin": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithCamelCaseAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            // Real server payloads are camelCase, unlike the PascalCase used in the other tests above -
+            // this exercises the case-insensitive property lookups.
+            var jsonMessage = """
+                            {
+                                "eventType": "Admin",
+                                "message": {
+                                    "noticeType": "Disconnect",
+                                    "arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithOrdinaryDataMessage_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Trade",
+                                "PerformanceId": "0P0000038R",
+                                "SequenceNumber": 42
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithInvalidJson_ReturnsFalse()
+        {
+            StreamingApiClient.ShouldArbitrate("not valid json").Should().BeFalse();
         }
 
         [Fact]

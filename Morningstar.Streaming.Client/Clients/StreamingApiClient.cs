@@ -1,3 +1,6 @@
+using System.Net.WebSockets;
+using System.Text;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
@@ -7,9 +10,6 @@ using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Net.WebSockets;
-using System.Text;
-using System.Threading.Channels;
 
 namespace Morningstar.Streaming.Client.Clients
 {
@@ -149,6 +149,35 @@ namespace Morningstar.Streaming.Client.Clients
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
+                onDisconnectNoticeReceived: null,
+                gracefulCloseToken: default,
+                cancellationToken);
+        }
+
+        public async Task SubscribeAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            string? purpose,
+            Func<string, Task> onMessageAsync,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger,
+            Action onDisconnectNoticeReceived,
+            CancellationToken gracefulCloseToken)
+        {
+            await ConnectWithRetryAsync(
+                subscriptionId,
+                webSocketUrl,
+                purpose,
+                onMessageAsync,
+                connected,
+                counterLogger,
+                latencyLogger,
+                sequenceLogger,
+                onDisconnectNoticeReceived,
+                gracefulCloseToken,
                 cancellationToken);
         }
 
@@ -161,13 +190,15 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            Action? onDisconnectNoticeReceived,
+            CancellationToken gracefulCloseToken,
             CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
             int attempt = 0;
             DisconnectKind? reconnectMetricKind = null;
 
-            while (!cancellationToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested && !gracefulCloseToken.IsCancellationRequested)
             {
                 attempt++;
 
@@ -186,7 +217,7 @@ namespace Morningstar.Streaming.Client.Clients
                     // Reset attempt counter after successful connection
                     attempt = 0;
 
-                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger);
+                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger, onDisconnectNoticeReceived, gracefulCloseToken);
 
                     if (!ShouldReconnect(receiveLoopResult, cancellationToken))
                     {
@@ -339,12 +370,14 @@ namespace Morningstar.Streaming.Client.Clients
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
-            ISequenceLogger? sequenceLogger)
+            ISequenceLogger? sequenceLogger,
+            Action? onDisconnectNoticeReceived,
+            CancellationToken gracefulCloseToken)
         {
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
             var pendingDisconnectKind = DisconnectKind.Unexpected;
-            using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, gracefulCloseToken);
             var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
 
             var messageChannel = Channel.CreateUnbounded<IncomingMessage>(new UnboundedChannelOptions()
@@ -368,6 +401,7 @@ namespace Morningstar.Streaming.Client.Clients
                 shutdownCancellationTokenSource,
                 detectedDisconnectKind => pendingDisconnectKind = detectedDisconnectKind,
                 telemetryChannel.Writer,
+                onDisconnectNoticeReceived,
                 cancellationToken);
 
             var telemetryTask = TelemetryLoopAsync(
@@ -422,13 +456,50 @@ namespace Morningstar.Streaming.Client.Clients
                 await IgnoreCancellationAsync(processorTask);
                 await IgnoreCancellationAsync(telemetryTask);
 
+                var retiringGracefully = gracefulCloseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
                 await shutdownCancellationTokenSource.CancelAsync();
-                AbortWebSocket(ws);
+
+                if (retiringGracefully)
+                {
+                    await CloseWebSocketGracefullyAsync(ws);
+                }
+                else
+                {
+                    AbortWebSocket(ws);
+                }
 
                 await IgnoreCancellationAsync(heartbeatTask);
             }
 
-            return new ReceiveLoopResult(!cancellationToken.IsCancellationRequested, pendingDisconnectKind);
+            var shouldReconnect = !cancellationToken.IsCancellationRequested && !gracefulCloseToken.IsCancellationRequested;
+            return new ReceiveLoopResult(shouldReconnect, pendingDisconnectKind);
+        }
+
+        /// <summary>
+        /// Closes a connection that is being deliberately retired (e.g. superseded by a replacement
+        /// connection) using a normal WebSocket close handshake instead of an abrupt abort.
+        /// </summary>
+        private async Task CloseWebSocketGracefullyAsync(ClientWebSocket ws)
+        {
+            if (ws.State != WebSocketState.Open)
+            {
+                AbortWebSocket(ws);
+                return;
+            }
+
+            try
+            {
+                using var closeTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Retired in favor of replacement connection", closeTimeoutCts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Graceful WebSocket close did not complete in time; aborting instead.");
+            }
+            finally
+            {
+                AbortWebSocket(ws);
+            }
         }
 
         private async Task ProcessMessageChannelAsync(
@@ -440,8 +511,11 @@ namespace Morningstar.Streaming.Client.Clients
             CancellationTokenSource shutdownCancellationTokenSource,
             Action<DisconnectKind> setDisconnectKind,
             ChannelWriter<TelemetryItem> telemetryWriter,
+            Action? onDisconnectNoticeReceived,
             CancellationToken cancellationToken)
         {
+            var disconnectNoticeSent = false;
+
             try
             {
                 await foreach (var message in reader.ReadAllAsync(cancellationToken))
@@ -472,6 +546,12 @@ namespace Morningstar.Streaming.Client.Clients
                     if (TryGetDisconnectKind(jsonMessage, out var disconnectKind))
                     {
                         setDisconnectKind(disconnectKind);
+
+                        if (!disconnectNoticeSent && ShouldArbitrate(jsonMessage))
+                        {
+                            disconnectNoticeSent = true;
+                            onDisconnectNoticeReceived?.Invoke();
+                        }
                     }
 
                     telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
@@ -838,16 +918,17 @@ namespace Morningstar.Streaming.Client.Clients
 
         private static bool IsExpectedDisconnect(JObject payload)
         {
-            var eventType = payload["EventType"]?.Value<string>();
+            var eventType = GetPropertyCaseInsensitive(payload, "EventType")?.Value<string>();
             if (string.Equals(eventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase))
             {
+                var message = GetPropertyCaseInsensitive(payload, "Message");
                 return string.Equals(
-                    payload["Message"]?["NoticeType"]?.Value<string>(),
+                    GetPropertyCaseInsensitive(message, "NoticeType")?.Value<string>(),
                     "Disconnect",
                     StringComparison.OrdinalIgnoreCase);
             }
 
-            var eventTypes = payload["EventTypes"] as JArray;
+            var eventTypes = GetPropertyCaseInsensitive(payload, "EventTypes") as JArray;
             var hasAdminEventType = eventTypes?.Values<string>()
                 .Any(value => string.Equals(value, EventTypes.Admin, StringComparison.OrdinalIgnoreCase)) == true;
 
@@ -856,10 +937,40 @@ namespace Morningstar.Streaming.Client.Clients
                 return false;
             }
 
+            var admin = GetPropertyCaseInsensitive(payload, "Admin");
             return string.Equals(
-                payload["Admin"]?["NoticeType"]?.Value<string>(),
+                GetPropertyCaseInsensitive(admin, "NoticeType")?.Value<string>(),
                 "Disconnect",
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Whether an already-classified Admin/Disconnect notice also opts into arbitration
+        /// (proactive replacement connection) via its "Arbitrate" flag. Only called for messages
+        /// that already matched <see cref="IsExpectedDisconnect"/>, so this is not on the hot path.
+        /// </summary>
+        internal static bool ShouldArbitrate(string jsonMessage)
+        {
+            try
+            {
+                var payload = JObject.Parse(jsonMessage);
+                var eventType = GetPropertyCaseInsensitive(payload, "EventType")?.Value<string>();
+
+                var noticePayload = string.Equals(eventType, EventTypes.Admin, StringComparison.OrdinalIgnoreCase)
+                    ? GetPropertyCaseInsensitive(payload, "Message")
+                    : GetPropertyCaseInsensitive(payload, "Admin");
+
+                return GetPropertyCaseInsensitive(noticePayload, "Arbitrate")?.Value<bool?>() == true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        private static JToken? GetPropertyCaseInsensitive(JToken? token, string propertyName)
+        {
+            return (token as JObject)?.Property(propertyName, StringComparison.OrdinalIgnoreCase)?.Value;
         }
 
         private bool ProcessMessageSequenceDetection(TelemetryItem item, MessagePacketEnvelope messagePacket)

@@ -5,6 +5,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
     /// </summary>
     public interface IWebSocketConsumer
     {
+        /// <summary>Raised once per Admin/Disconnect arbitration handover with its outcome.</summary>
+        event Action<ArbitrationOutcome>? ArbitrationCompleted;
+
         /// <summary>
         /// Starts consuming messages from the WebSocket connection.
         /// </summary>

@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Services.Subscriptions;
@@ -8,7 +9,6 @@ using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
-using System.Net;
 
 namespace Morningstar.Streaming.Client.Services
 {
@@ -24,6 +24,9 @@ namespace Morningstar.Streaming.Client.Services
         private readonly IObservableMetric<IMetric>? observableMetric;
         protected readonly bool logMessages;
         private const string StoppedDisconnectType = "Stopped";
+
+        /// <inheritdoc />
+        public event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
 
         public CanaryService(
             ISubscriptionGroupManager subscriptionManager,
@@ -87,6 +90,7 @@ namespace Morningstar.Streaming.Client.Services
                 try
                 {
                     var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
+                    consumer.ArbitrationCompleted += outcome => SubscriptionArbitrationCompleted?.Invoke(sub.Guid, outcome);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
                     await connectedTcs.Task;
