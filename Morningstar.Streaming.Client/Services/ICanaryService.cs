@@ -14,6 +14,15 @@ namespace Morningstar.Streaming.Client.Services
         /// <summary>Raised once per Admin/Disconnect arbitration handover, for any active subscription, with its outcome.</summary>
         event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
 
+        /// <summary>Raised when one of a subscription's WebSocket consumers ends permanently without a replacement taking over, leaving that URL's feed uncovered.</summary>
+        event Action<Guid, Guid, string?, string>? SubscriptionConsumerEndedWithoutReplacement;
+
+        /// <summary>Raised whenever a subscription's WebSocket connection ends, with a classification ("Expected"/"Unexpected"/"Stopped"). The library only reports the classification - callers decide what (if anything) to record.</summary>
+        event Action<Guid, Guid, string?, string, string>? SubscriptionDisconnected;
+
+        /// <summary>Raised whenever a reconnect attempt succeeds, with the classification of the disconnect that preceded it.</summary>
+        event Action<Guid, Guid, string?, string, string>? SubscriptionReconnected;
+
         /// <summary>
         /// Gets all currently active subscriptions.
         /// </summary>

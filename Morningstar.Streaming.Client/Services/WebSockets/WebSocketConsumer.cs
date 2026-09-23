@@ -27,6 +27,15 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         /// <inheritdoc />
         public event Action<ArbitrationOutcome>? ArbitrationCompleted;
 
+        /// <inheritdoc />
+        public event Action<Guid, string?, string>? ConsumerEndedWithoutReplacement;
+
+        /// <inheritdoc />
+        public event Action<Guid, string?, string, string>? Disconnected;
+
+        /// <inheritdoc />
+        public event Action<Guid, string?, string, string>? Reconnected;
+
         public WebSocketConsumer
         (
             ICounterLogger? counterLogger,
@@ -91,6 +100,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         if (!cancellationToken.IsCancellationRequested)
                         {
                             logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
+                            ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "RetriesExhausted");
                         }
 
                         return;
@@ -112,7 +122,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     }
 
                     await IgnoreExceptionsAsync(active.RunTask);
-                    ArbitrationCompleted?.Invoke(new ArbitrationOutcome(confirmed, replacementFailed));
+                    ArbitrationCompleted?.Invoke(new ArbitrationOutcome(topicGuid, purpose, confirmed, replacementFailed));
                     active.GracefulCloseSource.Dispose();
                     coordinator.EndOverlap();
 
@@ -124,6 +134,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         logger.LogError("Replacement WebSocket connection failed to establish during arbitration for subscription {SubscriptionId}; ending consumer.", topicGuid);
                         await IgnoreExceptionsAsync(incoming.RunTask);
                         incoming.GracefulCloseSource.Dispose();
+                        ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "ReplacementFailed");
                         return;
                     }
 
@@ -140,6 +151,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             catch (Exception ex)
             {
                 logger.LogError(ex, "WebSocket consumer failed unexpectedly.");
+                ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "RetriesExhausted");
             }
             finally
             {
@@ -178,7 +190,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 latencyLogger,
                 sequenceLogger,
                 onDisconnectNoticeReceived: () => noticeReceived.TrySetResult(true),
-                gracefulCloseToken: gracefulCloseSource.Token);
+                gracefulCloseToken: gracefulCloseSource.Token,
+                onDisconnected: disconnectType => Disconnected?.Invoke(topicGuid, purpose, wsUrl, disconnectType),
+                onReconnected: previousDisconnectType => Reconnected?.Invoke(topicGuid, purpose, wsUrl, previousDisconnectType));
 
             return new PhysicalSession(runTask, noticeReceived, gracefulCloseSource);
         }

@@ -62,6 +62,8 @@ namespace Morningstar.Streaming.Client.Clients
         /// Use this to retire a connection deliberately (e.g. after a replacement has taken over)
         /// without affecting <paramref name="cancellationToken"/>, which still governs the whole subscription.
         /// </param>
+        /// <param name="onDisconnected">Invoked with a classification ("Expected"/"Unexpected") whenever this connection ends. The library only reports the classification - callers decide what (if anything) to record.</param>
+        /// <param name="onReconnected">Invoked with the classification of the disconnect that preceded it, whenever a reconnect attempt succeeds.</param>
         Task SubscribeAsync(
             Guid subscriptionId,
             string webSocketUrl,
@@ -73,6 +75,8 @@ namespace Morningstar.Streaming.Client.Clients
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
             Action onDisconnectNoticeReceived,
-            CancellationToken gracefulCloseToken);
+            CancellationToken gracefulCloseToken,
+            Action<string> onDisconnected,
+            Action<string> onReconnected);
     }
 }

@@ -21,7 +21,6 @@ namespace Morningstar.Streaming.Client.Clients
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
         private readonly IAvroBinaryDeserializer avroBinaryDeserializer;
-        private readonly IObservableMetric<IMetric>? observableMetric;
         private readonly TimeSpan heartbeatTimeout = TimeSpan.FromMinutes(1);
         private readonly TimeSpan heartbeatCheckInterval = TimeSpan.FromSeconds(5);
         private const string ExpectedDisconnectType = "Expected";
@@ -43,14 +42,12 @@ namespace Morningstar.Streaming.Client.Clients
             IApiHelper apiHelper,
             ILogger<StreamingApiClient> logger,
             ITokenProvider tokenProvider,
-            IAvroBinaryDeserializer avroBinaryDeserializer,
-            IObservableMetric<IMetric>? observableMetric)
+            IAvroBinaryDeserializer avroBinaryDeserializer)
         {
             this.apiHelper = apiHelper;
             this.tokenProvider = tokenProvider;
             this.logger = logger;
             this.avroBinaryDeserializer = avroBinaryDeserializer;
-            this.observableMetric = observableMetric;
         }
 
         /// <summary>
@@ -151,6 +148,8 @@ namespace Morningstar.Streaming.Client.Clients
                 sequenceLogger,
                 onDisconnectNoticeReceived: null,
                 gracefulCloseToken: default,
+                onDisconnected: null,
+                onReconnected: null,
                 cancellationToken);
         }
 
@@ -165,7 +164,9 @@ namespace Morningstar.Streaming.Client.Clients
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
             Action onDisconnectNoticeReceived,
-            CancellationToken gracefulCloseToken)
+            CancellationToken gracefulCloseToken,
+            Action<string> onDisconnected,
+            Action<string> onReconnected)
         {
             await ConnectWithRetryAsync(
                 subscriptionId,
@@ -178,6 +179,8 @@ namespace Morningstar.Streaming.Client.Clients
                 sequenceLogger,
                 onDisconnectNoticeReceived,
                 gracefulCloseToken,
+                onDisconnected,
+                onReconnected,
                 cancellationToken);
         }
 
@@ -192,6 +195,8 @@ namespace Morningstar.Streaming.Client.Clients
             ISequenceLogger? sequenceLogger,
             Action? onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
+            Action<string>? onDisconnected,
+            Action<string>? onReconnected,
             CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
@@ -208,8 +213,11 @@ namespace Morningstar.Streaming.Client.Clients
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
-                    await RecordReconnectIfNeededAsync(subscriptionId, webSocketUrl, purpose, reconnectMetricKind);
-                    reconnectMetricKind = null;
+                    if (reconnectMetricKind.HasValue)
+                    {
+                        onReconnected?.Invoke(ToDisconnectType(reconnectMetricKind.Value));
+                        reconnectMetricKind = null;
+                    }
 
                     // Signal connection established
                     connected.TrySetResult(true);
@@ -221,11 +229,18 @@ namespace Morningstar.Streaming.Client.Clients
 
                     if (!ShouldReconnect(receiveLoopResult, cancellationToken))
                     {
+                        if (!cancellationToken.IsCancellationRequested && gracefulCloseToken.IsCancellationRequested)
+                        {
+                            // Retired for an arbitration handover, not a subscription stop - still a real
+                            // disconnect worth recording, it just won't be reconnected here.
+                            onDisconnected?.Invoke(ToDisconnectType(receiveLoopResult.Kind));
+                        }
+
                         return;
                     }
 
                     reconnectMetricKind = receiveLoopResult.Kind;
-                    await RecordDisconnectMetricAsync(subscriptionId, webSocketUrl, purpose, reconnectMetricKind.Value);
+                    onDisconnected?.Invoke(ToDisconnectType(reconnectMetricKind.Value));
 
                     // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
@@ -253,39 +268,6 @@ namespace Morningstar.Streaming.Client.Clients
         private static bool ShouldReconnect(ReceiveLoopResult receiveLoopResult, CancellationToken cancellationToken)
         {
             return receiveLoopResult.ShouldReconnect && !cancellationToken.IsCancellationRequested;
-        }
-
-        private async Task RecordReconnectIfNeededAsync(
-            Guid subscriptionId,
-            string webSocketUrl,
-            string? purpose,
-            DisconnectKind? reconnectMetricKind)
-        {
-            if (!reconnectMetricKind.HasValue)
-            {
-                return;
-            }
-
-            await RecordLifecycleMetricAsync(
-                MetricEvents.WebSocketReconnections,
-                subscriptionId,
-                webSocketUrl,
-                purpose,
-                reconnectMetricKind.Value);
-        }
-
-        private async Task RecordDisconnectMetricAsync(
-            Guid subscriptionId,
-            string webSocketUrl,
-            string? purpose,
-            DisconnectKind disconnectKind)
-        {
-            await RecordLifecycleMetricAsync(
-                MetricEvents.WebSocketDisconnections,
-                subscriptionId,
-                webSocketUrl,
-                purpose,
-                disconnectKind);
         }
 
         private async Task<bool> HandleConnectionFailureAsync(
@@ -427,7 +409,7 @@ namespace Morningstar.Streaming.Client.Clients
                     }
                     catch (OperationCanceledException) when (shutdownCancellationToken.IsCancellationRequested)
                     {
-                        return new ReceiveLoopResult(false, DisconnectKind.Unexpected);
+                        return new ReceiveLoopResult(false, pendingDisconnectKind);
                     }
                     catch (Exception ex)
                     {
@@ -794,58 +776,11 @@ namespace Morningstar.Streaming.Client.Clients
             return false;
         }
 
-        private async Task RecordLifecycleMetricAsync(
-            string metricName,
-            Guid subscriptionId,
-            string webSocketUrl,
-            string? purpose,
-            DisconnectKind disconnectKind)
-        {
-            if (observableMetric == null)
-            {
-                return;
-            }
-
-            var tags = BuildLifecycleMetricTags(metricName, subscriptionId, webSocketUrl, purpose, ToDisconnectType(disconnectKind));
-            await observableMetric.RecordMetric(metricName, new AtomicLong { Value = 1 }, tags);
-        }
-
         private static string ToDisconnectType(DisconnectKind disconnectKind)
         {
             return disconnectKind == DisconnectKind.Expected
                 ? ExpectedDisconnectType
                 : UnexpectedDisconnectType;
-        }
-
-        internal static Dictionary<string, string> BuildLifecycleMetricTags(
-            string metricName,
-            Guid subscriptionId,
-            string webSocketUrl,
-            string? purpose,
-            string? disconnectType)
-        {
-            var tags = new Dictionary<string, string>
-            {
-                { "TopicGuid", subscriptionId.ToString() },
-                { "SubscriptionId", subscriptionId.ToString() },
-                { "WebSocketUrl", webSocketUrl }
-            };
-
-            if (!string.IsNullOrWhiteSpace(purpose))
-            {
-                tags["Purpose"] = purpose;
-            }
-
-            if (!string.IsNullOrWhiteSpace(disconnectType))
-            {
-                var disconnectTypeTagName = metricName == MetricEvents.WebSocketReconnections
-                    ? "PreviousDisconnectType"
-                    : "DisconnectType";
-
-                tags[disconnectTypeTagName] = disconnectType;
-            }
-
-            return tags;
         }
 
         internal static bool TryGetExpectedDisconnectType(string jsonMessage, out string disconnectType)

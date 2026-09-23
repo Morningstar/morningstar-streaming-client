@@ -48,8 +48,7 @@ public static class ServiceCollectionExtensions
             serviceProvider.GetRequiredService<IApiHelper>(),
             serviceProvider.GetRequiredService<ILogger<StreamingApiClient>>(),
             serviceProvider.GetRequiredService<ITokenProvider>(),
-            serviceProvider.GetRequiredService<IAvroBinaryDeserializer>(),
-            serviceProvider.GetService<IObservableMetric<IMetric>>()));
+            serviceProvider.GetRequiredService<IAvroBinaryDeserializer>()));
 
         // Subscription services
         services.AddSingleton<IStreamSubscriptionFactory, StreamSubscriptionFactory>();

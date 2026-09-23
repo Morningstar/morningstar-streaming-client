@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,8 +13,6 @@ using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
-using System.Collections.Concurrent;
-using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ServiceTests
 {
@@ -90,10 +90,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockLogger = new Mock<ILogger<CanaryService>>();
             mockAppConfig = new Mock<IOptions<AppConfig>>();
             mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
-
-            mockObservableMetric
-                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
-                .Returns(Task.CompletedTask);
 
             // Setup AppConfig with default values
             mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
@@ -419,6 +415,10 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
                 .Returns(true);
 
+            var disconnectedEvents = new List<(Guid TopicGuid, string? Purpose, string WebSocketUrl, string DisconnectType)>();
+            canaryService.SubscriptionDisconnected += (_, topicGuid, purpose, url, disconnectType) =>
+                disconnectedEvents.Add((topicGuid, purpose, url, disconnectType));
+
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
@@ -430,18 +430,11 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.ErrorCode.Should().BeNull();
             cancellationTokenSource.IsCancellationRequested.Should().BeTrue();
             mockSubscriptionManager.Verify(x => x.TryRemove(subscriptionGuid, out outSub), Times.Once);
-            mockObservableMetric.Verify(
-                x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.Is<IDictionary<string, string>?>(tags =>
-                        tags != null &&
-                        tags["SubscriptionId"] == subscriptionGuid.ToString() &&
-                        tags["TopicGuid"] == subscriptionGuid.ToString() &&
-                        tags["Purpose"] == "Sample purpose" &&
-                        tags["DisconnectType"] == "Stopped" &&
-                        tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
-                Times.Once);
+            disconnectedEvents.Should().ContainSingle(e =>
+                e.TopicGuid == subscriptionGuid &&
+                e.Purpose == "Sample purpose" &&
+                e.DisconnectType == "Stopped" &&
+                e.WebSocketUrl == "wss://test.com/stream1/avro");
 
             Action accessTokenAfterStop = () => _ = cancellationTokenSource.Token;
             accessTokenAfterStop.Should().Throw<ObjectDisposedException>("the CancellationTokenSource should be disposed once the subscription is genuinely removed");
@@ -470,19 +463,16 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
                 .Returns(true);
 
-            mockObservableMetric
-                .Setup(x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream1/avro")))
-                .ThrowsAsync(new InvalidOperationException("Telemetry backend unavailable for stream1"));
+            var notifiedUrls = new List<string>();
+            canaryService.SubscriptionDisconnected += (_, _, _, url, _) =>
+            {
+                notifiedUrls.Add(url);
 
-            mockObservableMetric
-                .Setup(x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream2/avro")))
-                .Returns(Task.CompletedTask);
+                if (url == "wss://test.com/stream1/avro")
+                {
+                    throw new InvalidOperationException("Telemetry backend unavailable for stream1");
+                }
+            };
 
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
@@ -490,21 +480,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             result.Success.Should().BeTrue();
 
-            // The failing URL's metric was attempted...
-            mockObservableMetric.Verify(
-                x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream1/avro")),
-                Times.Once);
-
-            // ...but the failure did not prevent the second URL's metric from still being recorded.
-            mockObservableMetric.Verify(
-                x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.Is<IDictionary<string, string>?>(tags => tags != null && tags["WebSocketUrl"] == "wss://test.com/stream2/avro")),
-                Times.Once);
+            // The failing URL's notification was attempted, and the throwing subscriber did not
+            // prevent the second URL's notification from still being raised.
+            notifiedUrls.Should().BeEquivalentTo(new[] { "wss://test.com/stream1/avro", "wss://test.com/stream2/avro" });
         }
 
         [Fact]
@@ -536,14 +514,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             realSubscriptionManager.TryAdd(subscriptionGroup).Should().BeTrue();
 
-            mockObservableMetric
-                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
-                .ThrowsAsync(new InvalidOperationException("Telemetry backend unavailable"));
+            canaryService.SubscriptionDisconnected += (_, _, _, _, _) =>
+                throw new InvalidOperationException("Telemetry backend unavailable");
 
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
-            // Assert - cancellation and removal happen regardless of the metrics failure
+            // Assert - cancellation and removal happen regardless of the subscriber failure
             result.Should().NotBeNull();
             result.Success.Should().BeTrue();
             result.SubscriptionGuid.Should().Be(subscriptionGuid);
@@ -584,6 +561,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             realSubscriptionManager.TryAdd(subscriptionGroup).Should().BeTrue();
 
+            var notificationCount = 0;
+            canaryService.SubscriptionDisconnected += (_, _, _, _, _) => Interlocked.Increment(ref notificationCount);
+
             // Act
             var stopTask1 = canaryService.StopSubscriptionAsync(subscriptionGuid);
             var stopTask2 = canaryService.StopSubscriptionAsync(subscriptionGuid);
@@ -602,12 +582,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             // Assert
             realSubscriptionManager.Get().Should().BeEmpty();
             Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
-            mockObservableMetric.Verify(
-                x => x.RecordMetric(
-                    MetricEvents.WebSocketDisconnections,
-                    It.IsAny<AtomicLong>(),
-                    It.IsAny<IDictionary<string, string>?>()),
-                Times.Once);
+            notificationCount.Should().Be(1);
         }
 
         [Fact]
@@ -641,21 +616,18 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
 
             var callOrder = new List<string>();
 
-            mockObservableMetric
-                .Setup(x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()))
-                .Callback(() =>
-                {
-                    // Confirm the subscription is genuinely gone from the manager by the time metrics are recorded
-                    Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
-                    callOrder.Add("RecordMetric");
-                })
-                .Returns(Task.CompletedTask);
+            canaryService.SubscriptionDisconnected += (_, _, _, _, _) =>
+            {
+                // Confirm the subscription is genuinely gone from the manager by the time subscribers are notified
+                Assert.Throws<InvalidOperationException>(() => realSubscriptionManager.Get(subscriptionGuid));
+                callOrder.Add("Notify");
+            };
 
             // Act
             await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
-            // Assert - subscription is removed before metrics are recorded
-            callOrder.Should().Equal("RecordMetric");
+            // Assert - subscription is removed before subscribers are notified
+            callOrder.Should().Equal("Notify");
             realSubscriptionManager.Get().Should().BeEmpty();
         }
 
@@ -670,6 +642,9 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 .Setup(x => x.TryRemove(subscriptionGuid, out outSub))
                 .Returns(false);
 
+            var notified = false;
+            canaryService.SubscriptionDisconnected += (_, _, _, _, _) => notified = true;
+
             // Act
             var result = await canaryService.StopSubscriptionAsync(subscriptionGuid);
 
@@ -680,9 +655,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             result.ErrorCode.Should().Be(ErrorCodes.SubscriptionNotFound);
             result.Message.Should().Contain("not found");
             mockSubscriptionManager.Verify(x => x.TryRemove(subscriptionGuid, out outSub), Times.Once);
-            mockObservableMetric.Verify(
-                x => x.RecordMetric(It.IsAny<string>(), It.IsAny<IMetric>(), It.IsAny<IDictionary<string, string>?>()),
-                Times.Never);
+            notified.Should().BeFalse();
         }
 
         [Fact]
