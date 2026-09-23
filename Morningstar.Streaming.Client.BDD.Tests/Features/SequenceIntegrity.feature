@@ -1,6 +1,6 @@
 Feature: Sequence integrity metrics
     In order to detect gaps, duplicates and reordering in a market-data stream
-    As an operator watching the canary dashboards
+    As a Client
     I want each out-of-sequence condition classified into the right metric.
 
     Scenario: In-order messages record no anomalies

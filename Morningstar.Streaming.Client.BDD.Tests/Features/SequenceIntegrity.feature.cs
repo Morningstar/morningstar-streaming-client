@@ -41,8 +41,8 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
             TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features", "Sequence integrity metrics", "    In order to detect gaps, duplicates and reordering in a market-data stream\r\n " +
-                    "   As an operator watching the canary dashboards\r\n    I want each out-of-sequenc" +
-                    "e condition classified into the right metric.", ProgrammingLanguage.CSharp, featureTags);
+                    "   As a Client\r\n    I want each out-of-sequence condition classified into the ri" +
+                    "ght metric.", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         
