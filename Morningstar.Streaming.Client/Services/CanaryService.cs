@@ -25,10 +25,10 @@ namespace Morningstar.Streaming.Client.Services
         private const string StoppedDisconnectType = "Stopped";
 
         /// <inheritdoc />
-        public event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
+        public event Action<Guid, Guid, string?, string>? SubscriptionStarted;
 
         /// <inheritdoc />
-        public event Action<Guid, Guid, string?, string>? SubscriptionConsumerEndedWithoutReplacement;
+        public event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
 
         /// <inheritdoc />
         public event Action<Guid, Guid, string?, string, string>? SubscriptionDisconnected;
@@ -97,15 +97,21 @@ namespace Morningstar.Streaming.Client.Services
                 try
                 {
                     var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
-                    consumer.ArbitrationCompleted += outcome => SubscriptionArbitrationCompleted?.Invoke(sub.Guid, outcome);
-                    consumer.ConsumerEndedWithoutReplacement += (topicGuid, purpose, reason) => SubscriptionConsumerEndedWithoutReplacement?.Invoke(sub.Guid, topicGuid, purpose, reason);
-                    consumer.Disconnected += (topicGuid, purpose, url, disconnectType) => SubscriptionDisconnected?.Invoke(sub.Guid, topicGuid, purpose, url, disconnectType);
-                    consumer.Reconnected += (topicGuid, purpose, url, previousDisconnectType) => SubscriptionReconnected?.Invoke(sub.Guid, topicGuid, purpose, url, previousDisconnectType);
+                    consumer.Observer = new SubscriptionObserverRelay(sub.Guid, this);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
                     await connectedTcs.Task;
                     consumerTasks.Add(startTask);
                     succeededUrls.Add(url);
+
+                    try
+                    {
+                        SubscriptionStarted?.Invoke(sub.Guid, sub.Guid, req.Purpose, wsUrl);
+                    }
+                    catch (Exception notifyEx)
+                    {
+                        logger.LogWarning(notifyEx, "Failed to notify started subscription {SubscriptionGuid} for WebSocket URL {WebSocketUrl}", sub.Guid, wsUrl);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -274,6 +280,19 @@ namespace Morningstar.Streaming.Client.Services
                 Format = s.Format,
                 Purpose = s.Purpose
             }).ToList();
+        }
+
+        /// <summary>Adapts a single WebSocketConsumer's consolidated observer notifications onto this subscription's own events, tagging them with the logical subscription's Guid.</summary>
+        private sealed class SubscriptionObserverRelay(Guid subscriptionGuid, CanaryService owner) : IWebSocketConsumerObserver
+        {
+            public void OnArbitrationCompleted(ArbitrationOutcome outcome) =>
+                owner.SubscriptionArbitrationCompleted?.Invoke(subscriptionGuid, outcome);
+
+            public void OnDisconnected(Guid topicGuid, string? purpose, string webSocketUrl, string disconnectType) =>
+                owner.SubscriptionDisconnected?.Invoke(subscriptionGuid, topicGuid, purpose, webSocketUrl, disconnectType);
+
+            public void OnReconnected(Guid topicGuid, string? purpose, string webSocketUrl, string previousDisconnectType) =>
+                owner.SubscriptionReconnected?.Invoke(subscriptionGuid, topicGuid, purpose, webSocketUrl, previousDisconnectType);
         }
     }
 }

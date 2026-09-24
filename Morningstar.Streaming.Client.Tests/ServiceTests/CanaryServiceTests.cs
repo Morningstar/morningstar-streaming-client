@@ -183,6 +183,40 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
+        public async Task StartLevel1SubscriptionAsync_WithSuccessfulConsumers_RaisesSubscriptionStartedPerUrl()
+        {
+            // Arrange
+            var request = new StartSubscriptionRequest
+            {
+                DurationSeconds = 60,
+                Purpose = "Sample purpose",
+                StreamingFormat = "avro"
+            };
+
+            var expectedWebSocketUrls = new List<string> { "wss://test.com/stream1", "wss://test.com/stream2" };
+            var streamResult = CreateStreamResult(HttpStatusCode.OK, expectedWebSocketUrls);
+
+            mockStreamSubscriptionFactory
+                .Setup(x => x.CreateAsync(request))
+                .ReturnsAsync(streamResult);
+
+            SetupTryAddSuccess();
+            SetupSuccessfulConsumer();
+
+            var startedEvents = new List<(Guid TopicGuid, string? Purpose, string WebSocketUrl)>();
+            canaryService.SubscriptionStarted += (_, topicGuid, purpose, url) =>
+                startedEvents.Add((topicGuid, purpose, url));
+
+            // Act
+            var result = await canaryService.StartLevel1SubscriptionAsync(request);
+
+            // Assert
+            startedEvents.Should().HaveCount(2);
+            startedEvents.Should().OnlyContain(e => e.TopicGuid == result.SubscriptionGuid && e.Purpose == "Sample purpose");
+            startedEvents.Select(e => e.WebSocketUrl).Should().BeEquivalentTo(new[] { "wss://test.com/stream1/avro", "wss://test.com/stream2/avro" });
+        }
+
+        [Fact]
         public async Task StartLevel1SubscriptionAsync_WithPartialContentResponse_ReturnsStartSubscriptionResponse()
         {
             // Arrange

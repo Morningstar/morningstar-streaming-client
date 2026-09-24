@@ -42,7 +42,7 @@ public class StreamingStepDefinitions
     private sealed class FakeStreamingConnection
     {
         public required Func<string, Task> OnMessage { get; init; }
-        public required Action OnDisconnectNotice { get; init; }
+        public required Action<int?> OnDisconnectNotice { get; init; }
         public TaskCompletionSource RunCompletion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
@@ -227,11 +227,11 @@ public class StreamingStepDefinitions
                 It.IsAny<ICounterLogger?>(),
                 It.IsAny<ILatencyLogger?>(),
                 It.IsAny<ISequenceLogger?>(),
-                It.IsAny<Action>(),
+                It.IsAny<Action<int?>>(),
                 It.IsAny<CancellationToken>(),
                 It.IsAny<Action<string>>(),
                 It.IsAny<Action<string>>()))
-            .Returns((Guid _, string _, string? _, Func<string, Task> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, Action onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+            .Returns((Guid _, string _, string? _, Func<string, Task> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
             {
                 var connection = new FakeStreamingConnection { OnMessage = onMessage, OnDisconnectNotice = onNotice };
                 lock (connectionsLock)
@@ -262,7 +262,7 @@ public class StreamingStepDefinitions
     [When(@"an admin disconnect notice with arbitration enabled is received")]
     public async Task WhenAnAdminDisconnectNoticeWithArbitrationEnabledIsReceived()
     {
-        GetConnection(0).OnDisconnectNotice();
+        GetConnection(0).OnDisconnectNotice(null);
         await WaitUntilAsync(() => ConnectionCount() >= 2);
     }
 

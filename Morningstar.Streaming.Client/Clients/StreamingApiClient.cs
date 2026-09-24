@@ -163,7 +163,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
-            Action onDisconnectNoticeReceived,
+            Action<int?> onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string> onDisconnected,
             Action<string> onReconnected)
@@ -193,7 +193,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
-            Action? onDisconnectNoticeReceived,
+            Action<int?>? onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string>? onDisconnected,
             Action<string>? onReconnected,
@@ -353,7 +353,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
-            Action? onDisconnectNoticeReceived,
+            Action<int?>? onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken)
         {
             var buffer = new byte[4096];
@@ -493,7 +493,7 @@ namespace Morningstar.Streaming.Client.Clients
             CancellationTokenSource shutdownCancellationTokenSource,
             Action<DisconnectKind> setDisconnectKind,
             ChannelWriter<TelemetryItem> telemetryWriter,
-            Action? onDisconnectNoticeReceived,
+            Action<int?>? onDisconnectNoticeReceived,
             CancellationToken cancellationToken)
         {
             var disconnectNoticeSent = false;
@@ -529,10 +529,10 @@ namespace Morningstar.Streaming.Client.Clients
                     {
                         setDisconnectKind(disconnectKind);
 
-                        if (!disconnectNoticeSent && ShouldArbitrate(jsonMessage))
+                        if (!disconnectNoticeSent && ShouldArbitrate(jsonMessage, out var noticeMinutes))
                         {
                             disconnectNoticeSent = true;
-                            onDisconnectNoticeReceived?.Invoke();
+                            onDisconnectNoticeReceived?.Invoke(noticeMinutes);
                         }
                     }
 
@@ -884,8 +884,11 @@ namespace Morningstar.Streaming.Client.Clients
         /// (proactive replacement connection) via its "Arbitrate" flag. Only called for messages
         /// that already matched <see cref="IsExpectedDisconnect"/>, so this is not on the hot path.
         /// </summary>
-        internal static bool ShouldArbitrate(string jsonMessage)
+        /// <param name="noticeMinutes">The notice's NoticeMinutes value, if present - how long until the server actually closes the connection.</param>
+        internal static bool ShouldArbitrate(string jsonMessage, out int? noticeMinutes)
         {
+            noticeMinutes = null;
+
             try
             {
                 var payload = JObject.Parse(jsonMessage);
@@ -895,7 +898,13 @@ namespace Morningstar.Streaming.Client.Clients
                     ? GetPropertyCaseInsensitive(payload, "Message")
                     : GetPropertyCaseInsensitive(payload, "Admin");
 
-                return GetPropertyCaseInsensitive(noticePayload, "Arbitrate")?.Value<bool?>() == true;
+                if (GetPropertyCaseInsensitive(noticePayload, "Arbitrate")?.Value<bool?>() != true)
+                {
+                    return false;
+                }
+
+                noticeMinutes = GetPropertyCaseInsensitive(noticePayload, "NoticeMinutes")?.Value<int?>();
+                return true;
             }
             catch (JsonException)
             {

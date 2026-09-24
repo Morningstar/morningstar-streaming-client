@@ -10,6 +10,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 {
     public class WebSocketConsumer : IWebSocketConsumer
     {
+        private const string RetriesExhaustedDisconnectType = "RetriesExhausted";
         private readonly ILogger<WebSocketConsumer> logger;
         private readonly IStreamingApiClient client;
         private readonly string wsUrl;
@@ -23,18 +24,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly Channel<string> channel;
         private readonly Guid topicGuid;
         private readonly string serializationFormat;
+        private readonly TimeSpan defaultArbitrationRetirementTimeout;
 
         /// <inheritdoc />
-        public event Action<ArbitrationOutcome>? ArbitrationCompleted;
-
-        /// <inheritdoc />
-        public event Action<Guid, string?, string>? ConsumerEndedWithoutReplacement;
-
-        /// <inheritdoc />
-        public event Action<Guid, string?, string, string>? Disconnected;
-
-        /// <inheritdoc />
-        public event Action<Guid, string?, string, string>? Reconnected;
+        public IWebSocketConsumerObserver? Observer { get; set; }
 
         public WebSocketConsumer
         (
@@ -47,7 +40,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             string wsUrl,
             bool logToFile,
             string? purpose,
-            ISequenceLogger? sequenceLogger = null
+            ISequenceLogger? sequenceLogger = null,
+            int defaultArbitrationRetirementMinutes = 5
         )
         {
             this.logger = logger;
@@ -58,6 +52,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             this.counterLogger = counterLogger;
             this.latencyLogger = latencyLogger;
             this.sequenceLogger = sequenceLogger;
+            defaultArbitrationRetirementTimeout = TimeSpan.FromMinutes(defaultArbitrationRetirementMinutes);
 
             channel = Channel.CreateUnbounded<string>();
 
@@ -100,7 +95,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         if (!cancellationToken.IsCancellationRequested)
                         {
                             logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
-                            ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "RetriesExhausted");
+                            Observer?.OnDisconnected(topicGuid, purpose, wsUrl, RetriesExhaustedDisconnectType);
                         }
 
                         return;
@@ -109,10 +104,12 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     // Admin/Disconnect notice observed: bring up a replacement connection while the
                     // current one keeps running, then dedupe messages between them until it is safe
                     // to retire the old one.
+                    var noticeMinutes = active.NoticeReceived.Task.Result;
+                    var retirementTimeout = noticeMinutes.HasValue ? TimeSpan.FromMinutes(noticeMinutes.Value) : defaultArbitrationRetirementTimeout;
                     var incoming = StartPhysicalSession(new TaskCompletionSource<bool>(), coordinator, isIncomingSession: true, cancellationToken);
                     coordinator.BeginOverlap();
 
-                    await WaitForRetirementAsync(active, coordinator, cancellationToken);
+                    var timedOut = await WaitForRetirementAsync(active, coordinator, retirementTimeout, cancellationToken);
                     var confirmed = coordinator.DuplicateSeenOnIncoming.IsCompletedSuccessfully;
                     var replacementFailed = incoming.RunTask.IsFaulted;
 
@@ -122,7 +119,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     }
 
                     await IgnoreExceptionsAsync(active.RunTask);
-                    ArbitrationCompleted?.Invoke(new ArbitrationOutcome(topicGuid, purpose, confirmed, replacementFailed));
+                    Observer?.OnArbitrationCompleted(new ArbitrationOutcome(topicGuid, purpose, confirmed, replacementFailed, timedOut));
                     active.GracefulCloseSource.Dispose();
                     coordinator.EndOverlap();
 
@@ -130,11 +127,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     {
                         // Never promote a connection that never came up - the old one is already
                         // gone too (that's why we got here), so there is nothing left to serve this
-                        // subscription with.
+                        // subscription with. Already reported via OnArbitrationCompleted(ReplacementFailed=true).
                         logger.LogError("Replacement WebSocket connection failed to establish during arbitration for subscription {SubscriptionId}; ending consumer.", topicGuid);
                         await IgnoreExceptionsAsync(incoming.RunTask);
                         incoming.GracefulCloseSource.Dispose();
-                        ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "ReplacementFailed");
                         return;
                     }
 
@@ -151,7 +147,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             catch (Exception ex)
             {
                 logger.LogError(ex, "WebSocket consumer failed unexpectedly.");
-                ConsumerEndedWithoutReplacement?.Invoke(topicGuid, purpose, "RetriesExhausted");
+                Observer?.OnDisconnected(topicGuid, purpose, wsUrl, RetriesExhaustedDisconnectType);
             }
             finally
             {
@@ -165,18 +161,22 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         /// <summary>
         /// Waits until either the incoming connection has seen one duplicated message (proof it has
-        /// caught up with the retiring one) or the retiring connection ends on its own - e.g. the
-        /// server kills it - before that ever happens (natural expiry).
+        /// caught up with the retiring one), the retiring connection ends on its own - e.g. the server
+        /// kills it - or the given timeout elapses (e.g. the server told us via NoticeMinutes it would
+        /// disconnect us by now, but never confirmed dedupe) - whichever happens first.
         /// </summary>
-        private static async Task WaitForRetirementAsync(PhysicalSession retiring, ArbitrationCoordinator coordinator, CancellationToken cancellationToken)
+        /// <returns>True if the timeout elapsed before either of the other two outcomes.</returns>
+        private static async Task<bool> WaitForRetirementAsync(PhysicalSession retiring, ArbitrationCoordinator coordinator, TimeSpan timeout, CancellationToken cancellationToken)
         {
             var cancellationTask = Task.Delay(Timeout.Infinite, cancellationToken);
-            await Task.WhenAny(retiring.RunTask, coordinator.DuplicateSeenOnIncoming, cancellationTask);
+            var timeoutTask = Task.Delay(timeout, cancellationToken);
+            var completed = await Task.WhenAny(retiring.RunTask, coordinator.DuplicateSeenOnIncoming, timeoutTask, cancellationTask);
+            return completed == timeoutTask;
         }
 
         private PhysicalSession StartPhysicalSession(TaskCompletionSource<bool> connectedTcs, ArbitrationCoordinator coordinator, bool isIncomingSession, CancellationToken cancellationToken)
         {
-            var noticeReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var noticeReceived = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var gracefulCloseSource = new CancellationTokenSource();
 
             var runTask = client.SubscribeAsync(
@@ -189,10 +189,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
-                onDisconnectNoticeReceived: () => noticeReceived.TrySetResult(true),
+                onDisconnectNoticeReceived: noticeMinutes => noticeReceived.TrySetResult(noticeMinutes),
                 gracefulCloseToken: gracefulCloseSource.Token,
-                onDisconnected: disconnectType => Disconnected?.Invoke(topicGuid, purpose, wsUrl, disconnectType),
-                onReconnected: previousDisconnectType => Reconnected?.Invoke(topicGuid, purpose, wsUrl, previousDisconnectType));
+                onDisconnected: disconnectType => Observer?.OnDisconnected(topicGuid, purpose, wsUrl, disconnectType),
+                onReconnected: previousDisconnectType => Observer?.OnReconnected(topicGuid, purpose, wsUrl, previousDisconnectType));
 
             return new PhysicalSession(runTask, noticeReceived, gracefulCloseSource);
         }
@@ -263,7 +263,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         }
 
         /// <summary>A single physical WebSocket connection under management by this logical subscription.</summary>
-        private sealed record PhysicalSession(Task RunTask, TaskCompletionSource<bool> NoticeReceived, CancellationTokenSource GracefulCloseSource);
+        private sealed record PhysicalSession(Task RunTask, TaskCompletionSource<int?> NoticeReceived, CancellationTokenSource GracefulCloseSource);
 
         /// <summary>
         /// Tracks message-forwarding dedup while two physical connections are running concurrently

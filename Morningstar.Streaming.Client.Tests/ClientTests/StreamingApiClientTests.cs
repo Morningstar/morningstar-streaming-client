@@ -355,7 +355,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
         }
 
         [Fact]
@@ -371,7 +371,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
         }
 
         [Fact]
@@ -386,7 +386,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
         }
 
         [Fact]
@@ -402,7 +402,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
         }
 
         [Fact]
@@ -417,7 +417,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
         }
 
         [Fact]
@@ -435,7 +435,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeTrue();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
         }
 
         [Fact]
@@ -449,13 +449,48 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                             }
                             """;
 
-            StreamingApiClient.ShouldArbitrate(jsonMessage).Should().BeFalse();
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
         }
 
         [Fact]
         public void ShouldArbitrate_WithInvalidJson_ReturnsFalse()
         {
-            StreamingApiClient.ShouldArbitrate("not valid json").Should().BeFalse();
+            StreamingApiClient.ShouldArbitrate("not valid json", out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithNoticeMinutes_ExtractsValue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true,
+                                    "NoticeMinutes": 3
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out var noticeMinutes).Should().BeTrue();
+            noticeMinutes.Should().Be(3);
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithoutNoticeMinutes_ReturnsNull()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out var noticeMinutes).Should().BeTrue();
+            noticeMinutes.Should().BeNull();
         }
 
         [Fact]

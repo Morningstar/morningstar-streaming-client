@@ -53,8 +53,8 @@ namespace Morningstar.Streaming.Client.Clients
         /// </summary>
         /// <param name="onDisconnectNoticeReceived">
         /// Invoked once, as soon as an Admin/Disconnect notice is observed on the connection -
-        /// before the server actually closes it. Callers can use this to proactively establish a
-        /// replacement connection.
+        /// before the server actually closes it, with the notice's NoticeMinutes value (null if not
+        /// specified). Callers can use this to proactively establish a replacement connection.
         /// </param>
         /// <param name="gracefulCloseToken">
         /// When cancelled, the current connection is closed with a normal WebSocket close
@@ -74,7 +74,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
-            Action onDisconnectNoticeReceived,
+            Action<int?> onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string> onDisconnected,
             Action<string> onReconnected);
