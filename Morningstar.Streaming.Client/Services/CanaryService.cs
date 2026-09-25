@@ -41,8 +41,7 @@ namespace Morningstar.Streaming.Client.Services
             IStreamSubscriptionFactory streamSubscriptionFactory,
             IWebSocketConsumerFactory factory,
             ILogger<CanaryService> logger,
-            IOptions<AppConfig> appConfig,
-            IObservableMetric<IMetric>? observableMetric)
+            IOptions<AppConfig> appConfig)
         {
             this.subscriptionManager = subscriptionManager;
             this.streamSubscriptionFactory = streamSubscriptionFactory;

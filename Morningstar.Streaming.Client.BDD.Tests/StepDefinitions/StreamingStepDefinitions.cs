@@ -84,8 +84,7 @@ public class StreamingStepDefinitions
             streamSubscriptionFactoryMock.Object,
             webSocketConsumerFactoryMock.Object,
             loggerMock.Object,
-            appConfigMock.Object,
-            null);
+            appConfigMock.Object);
         canaryService.SubscriptionArbitrationCompleted += (subscriptionId, outcome) => reportedArbitrationOutcomes.Add((subscriptionId, outcome));
 
         // Reset connection state
@@ -168,9 +167,8 @@ public class StreamingStepDefinitions
     [When(@"I create a subscription")]
     public async Task WhenICreateASubscription()
     {
-        // Task.Run detaches from SpecFlow's per-step sync-over-async SynchronizationContext, which
-        // otherwise stops pumping once this step returns - stranding continuations of the long-lived
-        // background StartConsumingAsync task the arbitration scenarios drive across later steps.
+        // Task.Run detaches from SpecFlow's per-step SynchronizationContext, which would otherwise
+        // stop pumping continuations of the long-lived background task once this step returns.
         startSubscriptionResponse = await Task.Run(() => canaryService.StartLevel1SubscriptionAsync(startSubscriptionRequest));
 
         if (startSubscriptionResponse.SubscriptionGuid.HasValue)
@@ -254,7 +252,6 @@ public class StreamingStepDefinitions
                 wsLoggerFactoryMock.Object,
                 new Mock<ILogger<WebSocketConsumer>>().Object,
                 streamingApiClientMock.Object,
-                null,
                 wsUrl,
                 logToFile,
                 purpose));

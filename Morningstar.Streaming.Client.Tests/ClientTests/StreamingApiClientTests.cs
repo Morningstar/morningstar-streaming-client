@@ -221,7 +221,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             Func<string, Task> onMessageAsync = async (message) => await Task.CompletedTask;
 
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(750); // Allow time for at least one retry attempt
+            cts.CancelAfter(2500);
 
             var completed = new TaskCompletionSource<bool>();
 

@@ -207,9 +207,8 @@ namespace Morningstar.Streaming.Client.Clients
             int attempt = 0;
             DisconnectKind? reconnectMetricKind = null;
 
-            // ConnectWebSocketAsync/DelayReconnectAsync only ever see this token, so a graceful
-            // retirement requested mid-backoff or mid-connect is honored promptly instead of only
-            // being noticed once the active receive loop's own linked token picks it up.
+            // Linked so a graceful retirement requested mid-backoff/mid-connect is honored immediately,
+            // not only once the active receive loop's own linked token picks it up.
             using var connectCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, gracefulCloseToken);
             var connectCancellationToken = connectCancellationSource.Token;
 

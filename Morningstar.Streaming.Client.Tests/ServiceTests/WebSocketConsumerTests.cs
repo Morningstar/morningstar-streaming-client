@@ -17,7 +17,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<ILogger<WebSocketConsumer>> mockLogger;
         private readonly Mock<IStreamingApiClient> mockClient;
         private readonly Mock<ILogger> mockEventsLogger;
-        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
 
         public WebSocketConsumerTests()
         {
@@ -29,7 +28,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockLogger = new Mock<ILogger<WebSocketConsumer>>();
             mockClient = new Mock<IStreamingApiClient>();
             mockEventsLogger = new Mock<ILogger>();
-            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup default WebSocketLoggerFactory behavior
             mockWsLoggerFactory
@@ -51,7 +49,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -77,7 +74,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -102,7 +98,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -140,7 +135,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -185,7 +179,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -235,7 +228,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -307,7 +299,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -365,7 +356,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -419,7 +409,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 false,
                 null,
@@ -480,7 +469,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -536,7 +524,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -604,7 +591,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -660,7 +646,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -716,7 +701,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -778,7 +762,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -829,7 +812,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
@@ -900,7 +882,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 false,
                 null,
@@ -930,7 +911,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
-        public async Task StartConsumingAsync_WithUnexpectedDisconnection_DoesNotRecordMetricInConsumer()
+        public async Task StartConsumingAsync_WithUnexpectedDisconnection_NotifiesObserverAsRetriesExhausted()
         {
             // Arrange
             var guid = Guid.NewGuid();
@@ -947,7 +928,12 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
                     It.IsAny<ILatencyLogger?>(),
-                    It.IsAny<ISequenceLogger?>()))
+                    It.IsAny<ISequenceLogger?>(),
+                    It.IsAny<SequenceGapDetector?>(),
+                    It.IsAny<Action<int?>>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<Action<string>>(),
+                    It.IsAny<Action<string>>()))
                 .Returns(async () =>
                 {
                     await Task.Delay(100);
@@ -960,11 +946,13 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockWsLoggerFactory.Object,
                 mockLogger.Object,
                 mockClient.Object,
-                mockObservableMetric.Object,
                 wsUrl,
                 logToFile,
                 null
             );
+
+            var mockObserver = new Mock<IWebSocketConsumerObserver>();
+            consumer.Observer = mockObserver.Object;
 
             using var cts = new CancellationTokenSource();
 
@@ -975,11 +963,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             await consumeTask;
 
             // Assert
-            mockObservableMetric.Verify(x => x.RecordMetric(
-                "WebSocketDisconnections",
-                It.IsAny<AtomicLong>(),
-                It.IsAny<Dictionary<string, string>>()),
-                Times.Never);
+            mockObserver.Verify(x => x.OnDisconnected(guid, null, wsUrl, "RetriesExhausted"), Times.Once);
         }
     }
 }

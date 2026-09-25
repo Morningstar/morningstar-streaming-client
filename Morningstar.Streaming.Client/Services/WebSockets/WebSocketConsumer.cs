@@ -28,9 +28,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly Guid topicGuid;
         private readonly string serializationFormat;
         private readonly TimeSpan defaultArbitrationRetirementTimeout;
-        // Owned for this consumer's whole lifetime and shared across every physical connection
-        // (reconnects and arbitration incoming/retiring pairs alike), so a replacement connection
-        // during a handover isn't cold-started with no memory of what the retiring one already saw.
+        // Shared across every physical connection for this consumer's lifetime so a replacement
+        // connection isn't cold-started with no memory of what the retiring one already saw.
         private readonly SequenceGapDetector? sequenceDetector;
 
         /// <inheritdoc />
@@ -43,7 +42,6 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             IWebSocketLoggerFactory wsLoggerFactory,
             ILogger<WebSocketConsumer> logger,
             IStreamingApiClient client,
-            IObservableMetric<IMetric>? observableMetric,
             string wsUrl,
             bool logToFile,
             string? purpose,
@@ -159,6 +157,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             }
             finally
             {
+                // Disposes whichever session is still current: a no-op if the arbitration loop already
+                // disposed it during a handover, but the only place the very last session gets disposed.
+                active.GracefulCloseSource.Dispose();
                 channel.Writer.Complete();
                 await logTask;
                 counterLogger?.UnregisterSubscription(topicGuid);

@@ -37,8 +37,7 @@ public static class ServiceCollectionExtensions
             serviceProvider.GetRequiredService<IStreamSubscriptionFactory>(),
             serviceProvider.GetRequiredService<IWebSocketConsumerFactory>(),
             serviceProvider.GetRequiredService<ILogger<CanaryService>>(),
-            serviceProvider.GetRequiredService<IOptions<AppConfig>>(),
-            serviceProvider.GetService<IObservableMetric<IMetric>>()));
+            serviceProvider.GetRequiredService<IOptions<AppConfig>>()));
         services.AddSingleton<ITokenProvider, TokenProvider>();
         services.AddSingleton<IAvroBinaryDeserializer, AvroBinaryDeserializer>();
 

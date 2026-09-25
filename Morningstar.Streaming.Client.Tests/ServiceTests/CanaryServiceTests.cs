@@ -78,7 +78,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<IWebSocketConsumerFactory> mockWebSocketConsumerFactory;
         private readonly Mock<ILogger<CanaryService>> mockLogger;
         private readonly Mock<IOptions<AppConfig>> mockAppConfig;
-        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly CanaryService canaryService;
 
         public CanaryServiceTests()
@@ -89,7 +88,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockWebSocketConsumerFactory = new Mock<IWebSocketConsumerFactory>();
             mockLogger = new Mock<ILogger<CanaryService>>();
             mockAppConfig = new Mock<IOptions<AppConfig>>();
-            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup AppConfig with default values
             mockAppConfig.Setup(x => x.Value).Returns(new AppConfig
@@ -107,8 +105,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object
+                mockAppConfig.Object
             );
         }
 
@@ -384,8 +381,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object
+                mockAppConfig.Object
             );
 
             var request = new StartSubscriptionRequest
@@ -529,8 +525,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var subscriptionGuid = Guid.NewGuid();
             var cancellationTokenSource = new CancellationTokenSource();
@@ -576,8 +571,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var subscriptionGuid = Guid.NewGuid();
             var cancellationTokenSource = new CancellationTokenSource();
@@ -629,8 +623,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var subscriptionGuid = Guid.NewGuid();
             var cancellationTokenSource = new CancellationTokenSource();
@@ -817,8 +810,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var request = new StartSubscriptionRequest
             {
@@ -879,8 +871,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var request = new StartSubscriptionRequest
             {
@@ -963,8 +954,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var request = new StartSubscriptionRequest
             {
@@ -1025,8 +1015,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockStreamSubscriptionFactory.Object,
                 mockWebSocketConsumerFactory.Object,
                 mockLogger.Object,
-                mockAppConfig.Object,
-                mockObservableMetric.Object);
+                mockAppConfig.Object);
 
             var request1 = new StartSubscriptionRequest { DurationSeconds = 60 };
             var request2 = new StartSubscriptionRequest { DurationSeconds = 60 };
