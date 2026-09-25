@@ -51,6 +51,11 @@ namespace Morningstar.Streaming.Client.Clients
         /// notice before the server closes the connection, and deliberately retiring a connection with
         /// a graceful close instead of an abort.
         /// </summary>
+        /// <param name="onMessageAsync">
+        /// Callback invoked for each message. Returns whether the message is new (should be
+        /// recorded in sequence telemetry) - false suppresses telemetry for messages the caller
+        /// has already deduped (e.g. a cross-socket duplicate during an arbitration overlap).
+        /// </param>
         /// <param name="onDisconnectNoticeReceived">
         /// Invoked once, as soon as an Admin/Disconnect notice is observed on the connection -
         /// before the server actually closes it, with the notice's NoticeMinutes value (null if not
@@ -74,7 +79,7 @@ namespace Morningstar.Streaming.Client.Clients
             Guid subscriptionId,
             string webSocketUrl,
             string? purpose,
-            Func<string, Task> onMessageAsync,
+            Func<string, Task<bool>> onMessageAsync,
             TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,

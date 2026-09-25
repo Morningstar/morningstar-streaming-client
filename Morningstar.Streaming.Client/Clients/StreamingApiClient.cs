@@ -141,7 +141,7 @@ namespace Morningstar.Streaming.Client.Clients
                 subscriptionId,
                 webSocketUrl,
                 purpose,
-                onMessageAsync,
+                WrapAsAlwaysNew(onMessageAsync),
                 connected,
                 counterLogger,
                 latencyLogger,
@@ -154,11 +154,19 @@ namespace Morningstar.Streaming.Client.Clients
                 cancellationToken);
         }
 
+        // Callers of the simpler overloads have no dedup concept of their own, so every message they
+        // process is always "new" as far as sequence telemetry is concerned.
+        private static Func<string, Task<bool>> WrapAsAlwaysNew(Func<string, Task> onMessageAsync) => async message =>
+        {
+            await onMessageAsync(message);
+            return true;
+        };
+
         public async Task SubscribeAsync(
             Guid subscriptionId,
             string webSocketUrl,
             string? purpose,
-            Func<string, Task> onMessageAsync,
+            Func<string, Task<bool>> onMessageAsync,
             TaskCompletionSource<bool> connected,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
@@ -191,7 +199,7 @@ namespace Morningstar.Streaming.Client.Clients
             Guid subscriptionId,
             string webSocketUrl,
             string? purpose,
-            Func<string, Task> onMessageAsync,
+            Func<string, Task<bool>> onMessageAsync,
             TaskCompletionSource<bool> connected,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
@@ -357,7 +365,7 @@ namespace Morningstar.Streaming.Client.Clients
         private async Task<ReceiveLoopResult> StartReceiveLoopAsync(
             Guid subscriptionId,
             ClientWebSocket ws,
-            Func<string, Task> onMessageAsync,
+            Func<string, Task<bool>> onMessageAsync,
             CancellationToken cancellationToken,
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
@@ -499,7 +507,7 @@ namespace Morningstar.Streaming.Client.Clients
             Guid subscriptionId,
             ChannelReader<IncomingMessage> reader,
             ClientWebSocket ws,
-            Func<string, Task> onMessageAsync,
+            Func<string, Task<bool>> onMessageAsync,
             Action updateLastHeartbeat,
             CancellationTokenSource shutdownCancellationTokenSource,
             Action<DisconnectKind> setDisconnectKind,
@@ -547,9 +555,12 @@ namespace Morningstar.Streaming.Client.Clients
                         }
                     }
 
-                    telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
+                    var shouldRecordTelemetry = await onMessageAsync(jsonMessage);
 
-                    await onMessageAsync(jsonMessage);
+                    if (shouldRecordTelemetry)
+                    {
+                        telemetryWriter.TryWrite(new TelemetryItem(message.MessageType, jsonMessage, message.ReceivedAtMillis));
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

@@ -209,7 +209,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     wsUrl,
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -247,7 +247,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     $"{wsUrl}",
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     mockCounterLogger.Object,
@@ -275,7 +275,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -286,7 +286,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task<bool>> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
                     {
                         capturedToken = token;
                         tcs.SetResult(true);
@@ -330,7 +330,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -341,7 +341,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? forwardedCounterLogger, ILatencyLogger? forwardedLatencyLogger, ISequenceLogger? forwardedSequenceLogger, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task<bool>> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? forwardedCounterLogger, ILatencyLogger? forwardedLatencyLogger, ISequenceLogger? forwardedSequenceLogger, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
                     {
                         messageCallback = callback;
                         forwardedCounterLogger.Should().BeSameAs(mockCounterLogger.Object);
@@ -385,7 +385,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -396,7 +396,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? forwardedSequenceLogger, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task<bool>> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? forwardedSequenceLogger, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
                     {
                         forwarded = forwardedSequenceLogger;
                         tcs.SetResult(true);
@@ -445,7 +445,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -456,7 +456,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task<bool>> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -569,7 +569,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -677,7 +677,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -688,7 +688,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
+                .Callback((Guid subscriptionId, string url, string? purpose, Func<string, Task<bool>> callback, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? __, ISequenceLogger? ___, SequenceGapDetector? sequenceDetector, Action<int?> onNotice, CancellationToken gracefulCloseToken, Action<string> onDisconnected, Action<string> onReconnected) =>
                     {
                         messageCallback = callback;
                         tcs.SetResult(true);
@@ -742,7 +742,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -850,7 +850,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),
@@ -861,7 +861,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<CancellationToken>(),
                     It.IsAny<Action<string>>(),
                     It.IsAny<Action<string>>()))
-                .Returns((Guid _, string _, string? _, Func<string, Task> _, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? detector, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+                .Returns((Guid _, string _, string? _, Func<string, Task<bool>> _, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? detector, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
                 {
                     capturedDetectors.Add(detector);
                     tcs.TrySetResult(true);
@@ -911,6 +911,102 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
+        public async Task StartConsumingAsync_ArbitrationConfirmation_RequiresDuplicateForEveryPerformanceId()
+        {
+            // Arrange
+            var guid = Guid.NewGuid();
+            var wsUrl = $"wss://test.com/stream/{guid}";
+
+            var callIndex = 0;
+            var retiringMessageHandler = default(Func<string, Task<bool>>);
+            var incomingMessageHandler = default(Func<string, Task<bool>>);
+            var retiringRunTcs = new TaskCompletionSource();
+            var incomingConnectedSignal = new TaskCompletionSource();
+            Action<int?>? capturedOnNotice = null;
+
+            mockClient
+                .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<ICounterLogger?>(),
+                    It.IsAny<ILatencyLogger?>(),
+                    It.IsAny<ISequenceLogger?>(),
+                    It.IsAny<SequenceGapDetector?>(),
+                    It.IsAny<Action<int?>>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<Action<string>>(),
+                    It.IsAny<Action<string>>()))
+                .Returns((Guid _, string _, string? _, Func<string, Task<bool>> onMessage, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+                {
+                    tcs.TrySetResult(true);
+
+                    if (Interlocked.Increment(ref callIndex) == 1)
+                    {
+                        retiringMessageHandler = onMessage;
+                        capturedOnNotice = onNotice;
+                        return retiringRunTcs.Task;
+                    }
+
+                    incomingMessageHandler = onMessage;
+                    incomingConnectedSignal.TrySetResult();
+                    return Task.Delay(Timeout.Infinite, token);
+                });
+
+            var mockObserver = new Mock<IWebSocketConsumerObserver>();
+            ArbitrationOutcome? capturedOutcome = null;
+            mockObserver
+                .Setup(o => o.OnArbitrationCompleted(It.IsAny<ArbitrationOutcome>()))
+                .Callback<ArbitrationOutcome>(outcome => capturedOutcome = outcome);
+
+            var consumer = new WebSocketConsumer(
+                mockCounterLogger.Object,
+                mockLatencyLogger.Object,
+                mockWsLoggerFactory.Object,
+                mockLogger.Object,
+                mockClient.Object,
+                wsUrl,
+                false,
+                null,
+                mockSequenceLogger.Object
+            );
+            consumer.Observer = mockObserver.Object;
+
+            using var cts = new CancellationTokenSource();
+            var connectedTcs = new TaskCompletionSource<bool>();
+
+            // Act
+            var consumeTask = consumer.StartConsumingAsync(connectedTcs, cts.Token);
+            await connectedTcs.Task;
+
+            capturedOnNotice.Should().NotBeNull();
+            capturedOnNotice!(null);
+
+            await Task.WhenAny(incomingConnectedSignal.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            // Retiring connection delivers messages for two distinct PerformanceIds.
+            const string messageA = "{\"PerformanceId\":\"PERF-A\",\"EventType\":\"Trade\",\"SequenceNumber\":1}";
+            const string messageB = "{\"PerformanceId\":\"PERF-B\",\"EventType\":\"Trade\",\"SequenceNumber\":1}";
+            await retiringMessageHandler!(messageA);
+            await retiringMessageHandler!(messageB);
+
+            // Incoming connection only echoes PERF-A - PERF-B was never proven caught-up.
+            await incomingMessageHandler!(messageA);
+            retiringRunTcs.TrySetResult();
+
+            await cts.CancelAsync();
+            await Task.WhenAny(consumeTask, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            // Assert
+            capturedOutcome.Should().NotBeNull();
+            capturedOutcome!.Value.Confirmed.Should().BeFalse(
+                "PERF-B was delivered by the retiring connection but never echoed by the incoming one, so not every instrument has proven catch-up");
+        }
+
+        [Fact]
         public async Task StartConsumingAsync_WithUnexpectedDisconnection_NotifiesObserverAsRetriesExhausted()
         {
             // Arrange
@@ -923,7 +1019,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                     It.IsAny<Guid>(),
                     It.IsAny<string>(),
                     It.IsAny<string?>(),
-                    It.IsAny<Func<string, Task>>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
                     It.IsAny<TaskCompletionSource<bool>>(),
                     It.IsAny<CancellationToken>(),
                     It.IsAny<ICounterLogger?>(),

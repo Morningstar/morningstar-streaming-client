@@ -207,7 +207,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             return new PhysicalSession(runTask, noticeReceived, gracefulCloseSource);
         }
 
-        private Func<string, Task> BuildMessageHandler(ArbitrationCoordinator coordinator, bool isIncomingSession) => message =>
+        private Func<string, Task<bool>> BuildMessageHandler(ArbitrationCoordinator coordinator, bool isIncomingSession) => message =>
         {
             if (coordinator.IsOverlapping)
             {
@@ -215,8 +215,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
                 if (!coordinator.TryClaim(performanceId, eventType, sequenceNumber, isIncomingSession))
                 {
-                    // Already forwarded by the other, overlapping connection.
-                    return Task.CompletedTask;
+                    // Already forwarded by the other, overlapping connection - suppress from both
+                    // the file log and sequence telemetry; this is an expected handover artifact,
+                    // not new data or a genuine duplicate.
+                    return Task.FromResult(false);
                 }
             }
 
@@ -225,7 +227,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 logger.LogError("Failed to enqueue message into channel. Message: {Message}", message);
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         };
 
         private static (string? PerformanceId, string? EventType, long? SequenceNumber) TryParseSequenceKey(string jsonMessage)
@@ -333,21 +335,25 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
         /// <summary>
         /// Tracks message-forwarding dedup while two physical connections are running concurrently
-        /// during an Admin/Disconnect-triggered handover, and signals as soon as the incoming
-        /// connection has proven it is caught up (seen one message the retiring connection already
-        /// forwarded). Not used at all outside an overlap window, so there is zero overhead in the
-        /// common case.
+        /// during an Admin/Disconnect-triggered handover, and signals once the incoming connection
+        /// has proven it is caught up on every PerformanceId the retiring one delivered during the
+        /// overlap - not just the first one, since a subscription can multiplex many instruments on
+        /// one socket and an early duplicate for a busy instrument proves nothing about a quieter
+        /// one. Not used at all outside an overlap window, so there is zero overhead in the common
+        /// case.
         /// </summary>
         private sealed class ArbitrationCoordinator
         {
             private readonly ConcurrentDictionary<(string PerformanceId, string EventType, long Sequence), byte> claimed = new();
-            private readonly TaskCompletionSource<bool> duplicateSeenOnIncoming = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly ConcurrentDictionary<string, byte> expectedKeys = new();
+            private readonly ConcurrentDictionary<string, byte> confirmedKeys = new();
+            private readonly TaskCompletionSource<bool> allKeysConfirmed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             private volatile bool overlapping;
 
             public bool IsOverlapping => overlapping;
 
-            /// <summary>Completes the first time the incoming connection delivers a message already forwarded by the retiring one.</summary>
-            public Task DuplicateSeenOnIncoming => duplicateSeenOnIncoming.Task;
+            /// <summary>Completes once the incoming connection has delivered a message for every PerformanceId the retiring connection delivered during the overlap.</summary>
+            public Task DuplicateSeenOnIncoming => allKeysConfirmed.Task;
 
             public void BeginOverlap() => overlapping = true;
 
@@ -355,6 +361,8 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             {
                 overlapping = false;
                 claimed.Clear();
+                expectedKeys.Clear();
+                confirmedKeys.Clear();
             }
 
             public bool TryClaim(string? performanceId, string? eventType, long? sequenceNumber, bool isIncomingSession)
@@ -367,12 +375,38 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
                 var claimedNow = claimed.TryAdd((performanceId, eventType, sequenceNumber.Value), 0);
 
-                if (!claimedNow && isIncomingSession)
+                if (!isIncomingSession)
                 {
-                    duplicateSeenOnIncoming.TrySetResult(true);
+                    // Retiring connection: every distinct instrument it still delivers during the
+                    // overlap is one the incoming connection must also prove it has caught up on.
+                    expectedKeys.TryAdd(performanceId, 0);
+                }
+                else if (!claimedNow)
+                {
+                    // Incoming connection delivered a message already forwarded by the retiring one -
+                    // proof of catch-up for this specific PerformanceId.
+                    confirmedKeys.TryAdd(performanceId, 0);
+
+                    if (expectedKeys.Count > 0 && AllExpectedKeysConfirmed())
+                    {
+                        allKeysConfirmed.TrySetResult(true);
+                    }
                 }
 
                 return claimedNow;
+            }
+
+            private bool AllExpectedKeysConfirmed()
+            {
+                foreach (var key in expectedKeys.Keys)
+                {
+                    if (!confirmedKeys.ContainsKey(key))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
         }
     }

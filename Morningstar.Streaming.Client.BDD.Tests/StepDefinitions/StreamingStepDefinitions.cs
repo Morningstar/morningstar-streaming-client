@@ -41,7 +41,7 @@ public class StreamingStepDefinitions
     // letting steps drive messages/notices/completion directly into WebSocketConsumer.
     private sealed class FakeStreamingConnection
     {
-        public required Func<string, Task> OnMessage { get; init; }
+        public required Func<string, Task<bool>> OnMessage { get; init; }
         public required Action<int?> OnDisconnectNotice { get; init; }
         public TaskCompletionSource RunCompletion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
@@ -219,7 +219,7 @@ public class StreamingStepDefinitions
                 It.IsAny<Guid>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
-                It.IsAny<Func<string, Task>>(),
+                It.IsAny<Func<string, Task<bool>>>(),
                 It.IsAny<TaskCompletionSource<bool>>(),
                 It.IsAny<CancellationToken>(),
                 It.IsAny<ICounterLogger?>(),
@@ -230,7 +230,7 @@ public class StreamingStepDefinitions
                 It.IsAny<CancellationToken>(),
                 It.IsAny<Action<string>>(),
                 It.IsAny<Action<string>>()))
-            .Returns((Guid _, string _, string? _, Func<string, Task> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+            .Returns((Guid _, string _, string? _, Func<string, Task<bool>> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
             {
                 var connection = new FakeStreamingConnection { OnMessage = onMessage, OnDisconnectNotice = onNotice };
                 lock (connectionsLock)
