@@ -9,5 +9,8 @@ namespace Morningstar.Streaming.Domain.Config
         public uint ConnectionStringTtl { get; set; }
         public bool LogMessages { get; set; }
         public string LogMessagesPath { get; set; } = "logs";
+
+        // Fallback used when an Admin/Disconnect+Arbitrate notice doesn't carry its own NoticeMinutes.
+        public int DefaultArbitrationRetirementMinutes { get; set; } = 5;
     }
 }

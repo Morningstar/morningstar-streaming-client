@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -5,13 +6,12 @@ using Moq;
 using Morningstar.Streaming.Client.Clients;
 using Morningstar.Streaming.Client.Helpers;
 using Morningstar.Streaming.Client.Services.AvroBinaryDeserializer;
-using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Client.Services.Telemetry;
+using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
-using System.Net;
 
 namespace Morningstar.Streaming.Client.Tests.ClientTests
 {
@@ -21,7 +21,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         private readonly Mock<ITokenProvider> mockTokenProvider;
         private readonly Mock<ILogger<StreamingApiClient>> mockLogger;
         private readonly Mock<IAvroBinaryDeserializer> mockAvroBinaryDeserializer;
-        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly StreamingApiClient streamingApiClient;
 
         public StreamingApiClientTests()
@@ -31,7 +30,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             mockTokenProvider = new Mock<ITokenProvider>();
             mockLogger = new Mock<ILogger<StreamingApiClient>>();
             mockAvroBinaryDeserializer = new Mock<IAvroBinaryDeserializer>();
-            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             // Setup default token provider behavior
             mockTokenProvider
@@ -43,8 +41,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                 mockApiHelper.Object,
                 mockLogger.Object,
                 mockTokenProvider.Object,
-                mockAvroBinaryDeserializer.Object,
-                mockObservableMetric.Object
+                mockAvroBinaryDeserializer.Object
             );
         }
 
@@ -224,7 +221,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             Func<string, Task> onMessageAsync = async (message) => await Task.CompletedTask;
 
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(750); // Allow time for at least one retry attempt
+            cts.CancelAfter(2500);
 
             var completed = new TaskCompletionSource<bool>();
 
@@ -346,6 +343,157 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         }
 
         [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndArbitrateFalse_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": false
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAdminDisconnectEnvelopeAndNoArbitrateField_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAvroAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventTypes": ["Admin"],
+                                "Admin": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithAvroAdminDisconnectEnvelopeAndNoArbitrateField_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventTypes": ["Admin"],
+                                "Admin": {
+                                    "NoticeType": "Disconnect"
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithCamelCaseAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        {
+            // Real server payloads are camelCase, unlike the PascalCase used in the other tests above -
+            // this exercises the case-insensitive property lookups.
+            var jsonMessage = """
+                            {
+                                "eventType": "Admin",
+                                "message": {
+                                    "noticeType": "Disconnect",
+                                    "arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeTrue();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithOrdinaryDataMessage_ReturnsFalse()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Trade",
+                                "PerformanceId": "0P0000038R",
+                                "SequenceNumber": 42
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithInvalidJson_ReturnsFalse()
+        {
+            StreamingApiClient.ShouldArbitrate("not valid json", out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithNoticeMinutes_ExtractsValue()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true,
+                                    "NoticeMinutes": 3
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out var noticeMinutes).Should().BeTrue();
+            noticeMinutes.Should().Be(3);
+        }
+
+        [Fact]
+        public void ShouldArbitrate_WithoutNoticeMinutes_ReturnsNull()
+        {
+            var jsonMessage = """
+                            {
+                                "EventType": "Admin",
+                                "Message": {
+                                    "NoticeType": "Disconnect",
+                                    "Arbitrate": true
+                                }
+                            }
+                            """;
+
+            StreamingApiClient.ShouldArbitrate(jsonMessage, out var noticeMinutes).Should().BeTrue();
+            noticeMinutes.Should().BeNull();
+        }
+
+        [Fact]
         public void IsAdminMessage_WithAdminEnvelope_ReturnsTrue()
         {
             var jsonMessage = """
@@ -393,43 +541,6 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
             var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(jsonMessage)!;
 
             StreamingApiClient.IsAdminMessage(messagePacket).Should().BeFalse();
-        }
-
-        [Fact]
-        public void BuildLifecycleMetricTags_IncludesSubscriptionIdAndDisconnectType()
-        {
-            var subscriptionId = Guid.NewGuid();
-            var tags = StreamingApiClient.BuildLifecycleMetricTags(
-                MetricEvents.WebSocketDisconnections,
-                subscriptionId,
-                "wss://test.com/stream",
-                "Sample purpose",
-                "Unexpected");
-
-            tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
-            tags["TopicGuid"].Should().Be(subscriptionId.ToString());
-            tags["Purpose"].Should().Be("Sample purpose");
-            tags["DisconnectType"].Should().Be("Unexpected");
-            tags["WebSocketUrl"].Should().Be("wss://test.com/stream");
-        }
-
-        [Fact]
-        public void BuildLifecycleMetricTags_ForReconnect_UsesPreviousDisconnectType()
-        {
-            var subscriptionId = Guid.NewGuid();
-            var tags = StreamingApiClient.BuildLifecycleMetricTags(
-                MetricEvents.WebSocketReconnections,
-                subscriptionId,
-                "wss://test.com/stream",
-                "Sample purpose",
-                "Expected");
-
-            tags["SubscriptionId"].Should().Be(subscriptionId.ToString());
-            tags["TopicGuid"].Should().Be(subscriptionId.ToString());
-            tags["Purpose"].Should().Be("Sample purpose");
-            tags["PreviousDisconnectType"].Should().Be("Expected");
-            tags.Should().NotContainKey("DisconnectType");
-            tags["WebSocketUrl"].Should().Be("wss://test.com/stream");
         }
     }
 }

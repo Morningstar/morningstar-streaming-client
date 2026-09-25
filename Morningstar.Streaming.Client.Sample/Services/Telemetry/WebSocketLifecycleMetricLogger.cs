@@ -1,43 +1,51 @@
-using Morningstar.Streaming.Client.Services.Telemetry;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Morningstar.Streaming.Client.Services;
+using Morningstar.Streaming.Client.Services.Telemetry;
 
 namespace Morningstar.Streaming.Client.Sample.Services.Telemetry;
 
-public class WebSocketLifecycleMetricLogger : IObservableMetric<IMetric>, IHostedService, IDisposable
+/// <summary>
+/// Sample IHostedService that observes ICanaryService's subscription lifecycle events and
+/// periodically logs aggregate disconnect/reconnect counts.
+/// </summary>
+public class WebSocketLifecycleMetricLogger : IHostedService, IDisposable
 {
+    private readonly ICanaryService canaryService;
     private readonly AtomicCounter disconnectionCounter = new();
     private readonly AtomicCounter reconnectionCounter = new();
     private Timer? timer;
     private readonly ILogger<WebSocketLifecycleMetricLogger> logger;
     private bool disposed;
 
-    public WebSocketLifecycleMetricLogger(ILogger<WebSocketLifecycleMetricLogger> logger)
+    public WebSocketLifecycleMetricLogger(ICanaryService canaryService, ILogger<WebSocketLifecycleMetricLogger> logger)
     {
+        this.canaryService = canaryService;
         this.logger = logger;
-    }
-    public Task RecordMetric(string name, IMetric value, IDictionary<string, string>? tags = null)
-    {
-        if (name == MetricEvents.WebSocketDisconnections)
-        {
-            disconnectionCounter.Increment();
-            LogMetric(name, tags);
-            return Task.CompletedTask;
-        }
-
-        if (name == MetricEvents.WebSocketReconnections)
-        {
-            reconnectionCounter.Increment();
-            LogMetric(name, tags);
-        }
-
-        return Task.CompletedTask;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        canaryService.SubscriptionDisconnected += OnSubscriptionDisconnected;
+        canaryService.SubscriptionReconnected += OnSubscriptionReconnected;
         timer = new Timer(LogAndCleanup, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
         return Task.CompletedTask;
+    }
+
+    private void OnSubscriptionDisconnected(Guid subscriptionId, Guid topicGuid, string? purpose, string webSocketUrl, string disconnectType)
+    {
+        disconnectionCounter.Increment();
+        logger.LogInformation(
+            "Observed disconnect. SubscriptionId: {SubscriptionId}. TopicGuid: {TopicGuid}. Purpose: {Purpose}. DisconnectType: {DisconnectType}. WebSocketUrl: {WebSocketUrl}",
+            subscriptionId, topicGuid, purpose, disconnectType, webSocketUrl);
+    }
+
+    private void OnSubscriptionReconnected(Guid subscriptionId, Guid topicGuid, string? purpose, string webSocketUrl, string previousDisconnectType)
+    {
+        reconnectionCounter.Increment();
+        logger.LogInformation(
+            "Observed reconnect. SubscriptionId: {SubscriptionId}. TopicGuid: {TopicGuid}. Purpose: {Purpose}. PreviousDisconnectType: {PreviousDisconnectType}. WebSocketUrl: {WebSocketUrl}",
+            subscriptionId, topicGuid, purpose, previousDisconnectType, webSocketUrl);
     }
 
     internal void LogAndCleanup(object? state)
@@ -63,30 +71,10 @@ public class WebSocketLifecycleMetricLogger : IObservableMetric<IMetric>, IHoste
         }
     }
 
-    private void LogMetric(string name, IDictionary<string, string>? tags)
-    {
-        var disconnectTypeTagName = name == MetricEvents.WebSocketReconnections
-            ? "PreviousDisconnectType"
-            : "DisconnectType";
-
-        logger.LogInformation(
-            "Observed {MetricName}. SubscriptionId: {SubscriptionId}. TopicGuid: {TopicGuid}. Purpose: {Purpose}. {DisconnectTypeTagName}: {DisconnectType}. WebSocketUrl: {WebSocketUrl}",
-            name,
-            GetTagValue(tags, "SubscriptionId"),
-            GetTagValue(tags, "TopicGuid"),
-            GetTagValue(tags, "Purpose"),
-            disconnectTypeTagName,
-            GetTagValue(tags, disconnectTypeTagName),
-            GetTagValue(tags, "WebSocketUrl"));
-    }
-
-    private static string GetTagValue(IDictionary<string, string>? tags, string key)
-    {
-        return tags != null && tags.TryGetValue(key, out var value) ? value : "n/a";
-    }
-
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        canaryService.SubscriptionDisconnected -= OnSubscriptionDisconnected;
+        canaryService.SubscriptionReconnected -= OnSubscriptionReconnected;
         timer?.Dispose();
         return Task.CompletedTask;
     }

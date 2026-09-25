@@ -41,3 +41,49 @@ Feature: Morningstar Streaming Client
             And I get an unexpected disconnect                   
         Then I am able to reconnect 
         And messages are successfully being received from where I left off
+
+
+    Scenario: Admin disconnect notice with arbitration confirmed hands over cleanly
+        Given I have a valid subscribe request
+            And the WebSocket consumer supports arbitration
+        When I create a subscription
+            And messages are successfully being received
+            And an admin disconnect notice with arbitration enabled is received
+            And the replacement connection delivers a duplicate message
+            And the original connection is closed by the server
+        Then the arbitration outcome is reported as "ConfirmedHandover"
+        And the subscription is still active
+
+
+    Scenario: Admin disconnect notice hands over on natural expiry without confirmation
+        Given I have a valid subscribe request
+            And the WebSocket consumer supports arbitration
+        When I create a subscription
+            And messages are successfully being received
+            And an admin disconnect notice with arbitration enabled is received
+            And the original connection is closed by the server
+        Then the arbitration outcome is reported as "UnconfirmedHandover"
+        And the subscription is still active
+
+
+    Scenario: Admin disconnect notice handover ends the subscription when the replacement fails
+        Given I have a valid subscribe request
+            And the WebSocket consumer supports arbitration
+        When I create a subscription
+            And messages are successfully being received
+            And an admin disconnect notice with arbitration enabled is received
+            And the replacement connection fails to establish
+            And the original connection is closed by the server
+        Then the arbitration outcome is reported as "ReplacementConnectionFailed"
+        And the subscription is no longer active
+
+
+    Scenario: Admin disconnect notice without arbitration enabled does not trigger a replacement connection
+        Given I have a valid subscribe request
+            And the WebSocket consumer supports arbitration
+        When I create a subscription
+            And messages are successfully being received
+            And an admin disconnect notice with arbitration disabled is received
+            And the original connection is closed by the server
+        Then no replacement connection is created
+        And the subscription is no longer active

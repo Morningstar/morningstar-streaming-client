@@ -71,8 +71,10 @@ class Program
                 // recovered, expired), uncomment the following line or replace it with your own implementation:
                 //services.AddTransient<ISequenceLogger, SequenceLogger>();
 
-                // If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
-                //services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
+                // If you want to observe disconnect and reconnect lifecycle events (e.g. to record your own
+                // metrics), uncomment the following line. It subscribes to ICanaryService.SubscriptionDisconnected/
+                // SubscriptionReconnected - see WebSocketLifecycleMetricLogger for an example.
+                //services.AddHostedService<WebSocketLifecycleMetricLogger>();
 
                 // Register all Morningstar Streaming Client services using the extension method
                 services.AddStreamingServices();
