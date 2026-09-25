@@ -146,6 +146,7 @@ namespace Morningstar.Streaming.Client.Clients
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
+                sequenceDetector: null,
                 onDisconnectNoticeReceived: null,
                 gracefulCloseToken: default,
                 onDisconnected: null,
@@ -163,6 +164,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
             Action<int?> onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string> onDisconnected,
@@ -177,6 +179,7 @@ namespace Morningstar.Streaming.Client.Clients
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
+                sequenceDetector,
                 onDisconnectNoticeReceived,
                 gracefulCloseToken,
                 onDisconnected,
@@ -193,6 +196,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
             Action<int?>? onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string>? onDisconnected,
@@ -203,13 +207,19 @@ namespace Morningstar.Streaming.Client.Clients
             int attempt = 0;
             DisconnectKind? reconnectMetricKind = null;
 
+            // ConnectWebSocketAsync/DelayReconnectAsync only ever see this token, so a graceful
+            // retirement requested mid-backoff or mid-connect is honored promptly instead of only
+            // being noticed once the active receive loop's own linked token picks it up.
+            using var connectCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, gracefulCloseToken);
+            var connectCancellationToken = connectCancellationSource.Token;
+
             while (!cancellationToken.IsCancellationRequested && !gracefulCloseToken.IsCancellationRequested)
             {
                 attempt++;
 
                 try
                 {
-                    using var ws = await ConnectWebSocketAsync(webSocketUrl, purpose, cancellationToken);
+                    using var ws = await ConnectWebSocketAsync(webSocketUrl, purpose, connectCancellationToken);
 
                     logger.LogInformation("WebSocket connected on attempt {Attempt}.", attempt);
 
@@ -225,7 +235,7 @@ namespace Morningstar.Streaming.Client.Clients
                     // Reset attempt counter after successful connection
                     attempt = 0;
 
-                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger, onDisconnectNoticeReceived, gracefulCloseToken);
+                    var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger, sequenceDetector, onDisconnectNoticeReceived, gracefulCloseToken);
 
                     if (!ShouldReconnect(receiveLoopResult, cancellationToken))
                     {
@@ -257,7 +267,7 @@ namespace Morningstar.Streaming.Client.Clients
                         attempt,
                         maxAttempts,
                         connected,
-                        cancellationToken))
+                        connectCancellationToken))
                     {
                         return;
                     }
@@ -353,6 +363,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
             Action<int?>? onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken)
         {
@@ -392,6 +403,7 @@ namespace Morningstar.Streaming.Client.Clients
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
+                sequenceDetector,
                 shutdownCancellationToken);
 
             var heartbeatTask = StartHeartbeatMonitorAsync(ws, () => lastHeartbeat, shutdownCancellationTokenSource, shutdownCancellationToken);
@@ -633,11 +645,14 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
             CancellationToken cancellationToken)
         {
-            var sequenceDetector = sequenceLogger != null
-                ? new SequenceGapDetector(subscriptionId, sequenceLogger)
-                : null;
+            // Reuse the caller-supplied detector (shared across a logical subscription's physical
+            // connections, including arbitration handovers) when given one; only own - and later
+            // clear - a detector we created ourselves for just this one connection attempt.
+            var ownsDetector = sequenceDetector is null && sequenceLogger != null;
+            sequenceDetector ??= sequenceLogger != null ? new SequenceGapDetector(subscriptionId, sequenceLogger) : null;
 
             void Flush()
             {
@@ -705,7 +720,10 @@ namespace Morningstar.Streaming.Client.Clients
                 try
                 {
                     Flush();
-                    sequenceDetector?.Clear();
+                    if (ownsDetector)
+                    {
+                        sequenceDetector?.Clear();
+                    }
                 }
                 catch (Exception ex)
                 {

@@ -64,6 +64,12 @@ namespace Morningstar.Streaming.Client.Clients
         /// </param>
         /// <param name="onDisconnected">Invoked with a classification ("Expected"/"Unexpected") whenever this connection ends. The library only reports the classification - callers decide what (if anything) to record.</param>
         /// <param name="onReconnected">Invoked with the classification of the disconnect that preceded it, whenever a reconnect attempt succeeds.</param>
+        /// <param name="sequenceDetector">
+        /// Optional, externally-owned detector to reuse across every physical connection for this
+        /// logical subscription (including arbitration handovers), so an incoming replacement
+        /// connection isn't cold-started with no memory of what the retiring one already saw. If
+        /// null, a detector is created and torn down locally for just this one connection attempt.
+        /// </param>
         Task SubscribeAsync(
             Guid subscriptionId,
             string webSocketUrl,
@@ -74,6 +80,7 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
             Action<int?> onDisconnectNoticeReceived,
             CancellationToken gracefulCloseToken,
             Action<string> onDisconnected,

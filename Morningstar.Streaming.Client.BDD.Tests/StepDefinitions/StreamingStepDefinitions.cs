@@ -227,11 +227,12 @@ public class StreamingStepDefinitions
                 It.IsAny<ICounterLogger?>(),
                 It.IsAny<ILatencyLogger?>(),
                 It.IsAny<ISequenceLogger?>(),
+                It.IsAny<SequenceGapDetector?>(),
                 It.IsAny<Action<int?>>(),
                 It.IsAny<CancellationToken>(),
                 It.IsAny<Action<string>>(),
                 It.IsAny<Action<string>>()))
-            .Returns((Guid _, string _, string? _, Func<string, Task> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+            .Returns((Guid _, string _, string? _, Func<string, Task> onMessage, TaskCompletionSource<bool> connected, CancellationToken _, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
             {
                 var connection = new FakeStreamingConnection { OnMessage = onMessage, OnDisconnectNotice = onNotice };
                 lock (connectionsLock)

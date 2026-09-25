@@ -11,6 +11,9 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
     public class WebSocketConsumer : IWebSocketConsumer
     {
         private const string RetriesExhaustedDisconnectType = "RetriesExhausted";
+        // Task.Delay's documented safe upper bound (int.MaxValue milliseconds); NoticeMinutes is
+        // server-controlled input and must never be allowed to exceed it.
+        private static readonly TimeSpan MaxRetirementTimeout = TimeSpan.FromMilliseconds(int.MaxValue);
         private readonly ILogger<WebSocketConsumer> logger;
         private readonly IStreamingApiClient client;
         private readonly string wsUrl;
@@ -25,6 +28,10 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
         private readonly Guid topicGuid;
         private readonly string serializationFormat;
         private readonly TimeSpan defaultArbitrationRetirementTimeout;
+        // Owned for this consumer's whole lifetime and shared across every physical connection
+        // (reconnects and arbitration incoming/retiring pairs alike), so a replacement connection
+        // during a handover isn't cold-started with no memory of what the retiring one already saw.
+        private readonly SequenceGapDetector? sequenceDetector;
 
         /// <inheritdoc />
         public IWebSocketConsumerObserver? Observer { get; set; }
@@ -68,6 +75,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
 
             topicGuid = topicGuidResult;
             eventsLogger = wsLoggerFactory.GetLogger(topicGuid);
+            sequenceDetector = sequenceLogger != null ? new SequenceGapDetector(topicGuid, sequenceLogger) : null;
         }
 
         public async Task StartConsumingAsync(TaskCompletionSource<bool> connectedTcs, CancellationToken cancellationToken = default)
@@ -95,7 +103,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                         if (!cancellationToken.IsCancellationRequested)
                         {
                             logger.LogWarning("WebSocket subscription task completed unexpectedly without cancellation.");
-                            Observer?.OnDisconnected(topicGuid, purpose, wsUrl, RetriesExhaustedDisconnectType);
+                            NotifyDisconnected(wsUrl, RetriesExhaustedDisconnectType);
                         }
 
                         return;
@@ -105,7 +113,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     // current one keeps running, then dedupe messages between them until it is safe
                     // to retire the old one.
                     var noticeMinutes = active.NoticeReceived.Task.Result;
-                    var retirementTimeout = noticeMinutes.HasValue ? TimeSpan.FromMinutes(noticeMinutes.Value) : defaultArbitrationRetirementTimeout;
+                    var retirementTimeout = ClampRetirementTimeout(noticeMinutes.HasValue ? TimeSpan.FromMinutes(noticeMinutes.Value) : defaultArbitrationRetirementTimeout);
                     var incoming = StartPhysicalSession(new TaskCompletionSource<bool>(), coordinator, isIncomingSession: true, cancellationToken);
                     coordinator.BeginOverlap();
 
@@ -119,7 +127,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                     }
 
                     await IgnoreExceptionsAsync(active.RunTask);
-                    Observer?.OnArbitrationCompleted(new ArbitrationOutcome(topicGuid, purpose, confirmed, replacementFailed, timedOut));
+                    NotifyArbitrationCompleted(new ArbitrationOutcome(topicGuid, purpose, confirmed, replacementFailed, timedOut));
                     active.GracefulCloseSource.Dispose();
                     coordinator.EndOverlap();
 
@@ -147,7 +155,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             catch (Exception ex)
             {
                 logger.LogError(ex, "WebSocket consumer failed unexpectedly.");
-                Observer?.OnDisconnected(topicGuid, purpose, wsUrl, RetriesExhaustedDisconnectType);
+                NotifyDisconnected(wsUrl, RetriesExhaustedDisconnectType);
             }
             finally
             {
@@ -189,10 +197,11 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
                 counterLogger,
                 latencyLogger,
                 sequenceLogger,
+                sequenceDetector,
                 onDisconnectNoticeReceived: noticeMinutes => noticeReceived.TrySetResult(noticeMinutes),
                 gracefulCloseToken: gracefulCloseSource.Token,
-                onDisconnected: disconnectType => Observer?.OnDisconnected(topicGuid, purpose, wsUrl, disconnectType),
-                onReconnected: previousDisconnectType => Observer?.OnReconnected(topicGuid, purpose, wsUrl, previousDisconnectType));
+                onDisconnected: disconnectType => NotifyDisconnected(wsUrl, disconnectType),
+                onReconnected: previousDisconnectType => NotifyReconnected(wsUrl, previousDisconnectType));
 
             return new PhysicalSession(runTask, noticeReceived, gracefulCloseSource);
         }
@@ -241,6 +250,62 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             {
                 logger.LogDebug(ex, "Retired WebSocket session for subscription {SubscriptionId} ended.", topicGuid);
             }
+        }
+
+        // Observer implementations are caller-supplied; a throwing observer must never be able to
+        // skip our own cleanup (CancellationTokenSource disposal, coordinator bookkeeping) or corrupt
+        // the connect/reconnect loop's failure accounting.
+        private void NotifyDisconnected(string webSocketUrl, string disconnectType)
+        {
+            try
+            {
+                Observer?.OnDisconnected(topicGuid, purpose, webSocketUrl, disconnectType);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Observer.OnDisconnected threw for subscription {SubscriptionId}.", topicGuid);
+            }
+        }
+
+        private void NotifyReconnected(string webSocketUrl, string previousDisconnectType)
+        {
+            try
+            {
+                Observer?.OnReconnected(topicGuid, purpose, webSocketUrl, previousDisconnectType);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Observer.OnReconnected threw for subscription {SubscriptionId}.", topicGuid);
+            }
+        }
+
+        private void NotifyArbitrationCompleted(ArbitrationOutcome outcome)
+        {
+            try
+            {
+                Observer?.OnArbitrationCompleted(outcome);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Observer.OnArbitrationCompleted threw for subscription {SubscriptionId}.", topicGuid);
+            }
+        }
+
+        private TimeSpan ClampRetirementTimeout(TimeSpan timeout)
+        {
+            if (timeout < TimeSpan.Zero)
+            {
+                logger.LogWarning("Received a negative arbitration retirement timeout ({Timeout}) for subscription {SubscriptionId}; treating as immediate.", timeout, topicGuid);
+                return TimeSpan.Zero;
+            }
+
+            if (timeout > MaxRetirementTimeout)
+            {
+                logger.LogWarning("Arbitration retirement timeout ({Timeout}) for subscription {SubscriptionId} exceeds the maximum supported delay; clamping to {MaxTimeout}.", timeout, topicGuid, MaxRetirementTimeout);
+                return MaxRetirementTimeout;
+            }
+
+            return timeout;
         }
 
         private async Task LogFromChannelAsync(CancellationToken cancellationToken)
