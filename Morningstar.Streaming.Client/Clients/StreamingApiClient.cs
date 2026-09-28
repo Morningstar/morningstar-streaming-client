@@ -689,31 +689,7 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     while (reader.TryRead(out var item))
                     {
-                        counterLogger?.Increment(subscriptionId);
-
-                        var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(item.jsonMessage);
-
-                        if (messagePacket == null)
-                        {
-                            logger.LogWarning("Failed to deserialize message for telemetry. Message: {Message}", item.jsonMessage);
-                            continue;
-                        }
-
-                        if (ProcessMessageSequenceDetection(item, messagePacket))
-                        {
-                            sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
-                        }
-
-                        if (messagePacket!.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
-                        {
-                            var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
-                            var latencyMillis = item.ReceivedAtMillis - publishTimeMillis;
-
-                            if (latencyMillis >= 0)
-                            {
-                                latencyLogger?.RecordLatency(subscriptionId, latencyMillis);
-                            }
-                        }
+                        ProcessTelemetryItem(subscriptionId, item, sequenceDetector, counterLogger, latencyLogger);
 
                         var nowTick = Environment.TickCount64;
                         if (nowTick - lastFlushTick >= FlushIntervalMillis)
