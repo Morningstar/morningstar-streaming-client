@@ -421,10 +421,8 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
         }
 
         [Fact]
-        public void ShouldArbitrate_WithCamelCaseAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
+        public void ShouldArbitrate_WithCaseInsensitiveAdminDisconnectEnvelopeAndArbitrateTrue_ReturnsTrue()
         {
-            // Real server payloads are camelCase, unlike the PascalCase used in the other tests above -
-            // this exercises the case-insensitive property lookups.
             var jsonMessage = """
                             {
                                 "eventType": "Admin",
