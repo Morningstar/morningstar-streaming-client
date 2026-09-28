@@ -1,3 +1,4 @@
+using Morningstar.Streaming.Client.Services.WebSockets;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
 
@@ -10,6 +11,18 @@ namespace Morningstar.Streaming.Client.Services
     /// </summary>
     public interface ICanaryService
     {
+        /// <summary>Raised once per WebSocket consumer that successfully connects when a subscription starts.</summary>
+        event Action<Guid, Guid, string?, string>? SubscriptionStarted;
+
+        /// <summary>Raised once per Admin/Disconnect arbitration handover, for any active subscription, with its outcome.</summary>
+        event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
+
+        /// <summary>Raised whenever a subscription's WebSocket connection ends, with a classification ("Expected"/"Unexpected"/"Stopped"/"RetriesExhausted"). The library only reports the classification - callers decide what (if anything) to record.</summary>
+        event Action<Guid, Guid, string?, string, string>? SubscriptionDisconnected;
+
+        /// <summary>Raised whenever a reconnect attempt succeeds, with the classification of the disconnect that preceded it.</summary>
+        event Action<Guid, Guid, string?, string, string>? SubscriptionReconnected;
+
         /// <summary>
         /// Gets all currently active subscriptions.
         /// </summary>

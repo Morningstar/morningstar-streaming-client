@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Morningstar.Streaming.Client.Services.Subscriptions;
@@ -8,7 +9,6 @@ using Morningstar.Streaming.Domain.Config;
 using Morningstar.Streaming.Domain.Constants;
 using Morningstar.Streaming.Domain.Contracts;
 using Morningstar.Streaming.Domain.Models;
-using System.Net;
 
 namespace Morningstar.Streaming.Client.Services
 {
@@ -21,23 +21,32 @@ namespace Morningstar.Streaming.Client.Services
         protected readonly IStreamSubscriptionFactory streamSubscriptionFactory;
         protected readonly IWebSocketConsumerFactory factory;
         protected readonly ILogger logger;
-        private readonly IObservableMetric<IMetric>? observableMetric;
         protected readonly bool logMessages;
         private const string StoppedDisconnectType = "Stopped";
+
+        /// <inheritdoc />
+        public event Action<Guid, Guid, string?, string>? SubscriptionStarted;
+
+        /// <inheritdoc />
+        public event Action<Guid, ArbitrationOutcome>? SubscriptionArbitrationCompleted;
+
+        /// <inheritdoc />
+        public event Action<Guid, Guid, string?, string, string>? SubscriptionDisconnected;
+
+        /// <inheritdoc />
+        public event Action<Guid, Guid, string?, string, string>? SubscriptionReconnected;
 
         public CanaryService(
             ISubscriptionGroupManager subscriptionManager,
             IStreamSubscriptionFactory streamSubscriptionFactory,
             IWebSocketConsumerFactory factory,
             ILogger<CanaryService> logger,
-            IOptions<AppConfig> appConfig,
-            IObservableMetric<IMetric>? observableMetric)
+            IOptions<AppConfig> appConfig)
         {
             this.subscriptionManager = subscriptionManager;
             this.streamSubscriptionFactory = streamSubscriptionFactory;
             this.factory = factory;
             this.logger = logger;
-            this.observableMetric = observableMetric;
             logMessages = appConfig.Value.LogMessages;
         }
 
@@ -87,11 +96,21 @@ namespace Morningstar.Streaming.Client.Services
                 try
                 {
                     var consumer = factory.Create(wsUrl, logMessages, req.Purpose);
+                    consumer.Observer = new SubscriptionObserverRelay(sub.Guid, this);
                     var connectedTcs = new TaskCompletionSource<bool>();
                     var startTask = consumer.StartConsumingAsync(connectedTcs, sub.CancellationTokenSource.Token);
                     await connectedTcs.Task;
                     consumerTasks.Add(startTask);
                     succeededUrls.Add(url);
+
+                    try
+                    {
+                        SubscriptionStarted?.Invoke(sub.Guid, sub.Guid, req.Purpose, wsUrl);
+                    }
+                    catch (Exception notifyEx)
+                    {
+                        logger.LogWarning(notifyEx, "Failed to notify started subscription {SubscriptionGuid} for WebSocket URL {WebSocketUrl}", sub.Guid, wsUrl);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -201,11 +220,11 @@ namespace Morningstar.Streaming.Client.Services
 
             try
             {
-                await RecordStoppedMetricsAsync(sub);
+                NotifySubscriptionStopped(sub);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to record stopped metrics for subscription {SubscriptionGuid}", guid);
+                logger.LogWarning(ex, "Failed to notify stopped subscription {SubscriptionGuid}", guid);
             }
             finally
             {
@@ -220,25 +239,17 @@ namespace Morningstar.Streaming.Client.Services
             };
         }
 
-        private async Task RecordStoppedMetricsAsync(SubscriptionGroup subscription)
+        private void NotifySubscriptionStopped(SubscriptionGroup subscription)
         {
-            if (observableMetric == null)
-            {
-                return;
-            }
-
             foreach (var webSocketUrl in GetMetricWebSocketUrls(subscription))
             {
                 try
                 {
-                    await observableMetric.RecordMetric(
-                        MetricEvents.WebSocketDisconnections,
-                        new AtomicLong { Value = 1 },
-                        BuildLifecycleMetricTags(subscription.Guid, webSocketUrl, subscription.Purpose, StoppedDisconnectType));
+                    SubscriptionDisconnected?.Invoke(subscription.Guid, subscription.Guid, subscription.Purpose, webSocketUrl, StoppedDisconnectType);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to record stopped metric for subscription {SubscriptionGuid} and WebSocket URL {WebSocketUrl}", subscription.Guid, webSocketUrl);
+                    logger.LogWarning(ex, "Failed to notify stopped subscription {SubscriptionGuid} for WebSocket URL {WebSocketUrl}", subscription.Guid, webSocketUrl);
                 }
             }
         }
@@ -257,24 +268,6 @@ namespace Morningstar.Streaming.Client.Services
             }
         }
 
-        private static Dictionary<string, string> BuildLifecycleMetricTags(Guid subscriptionId, string webSocketUrl, string? purpose, string disconnectType)
-        {
-            var tags = new Dictionary<string, string>
-            {
-                { "TopicGuid", subscriptionId.ToString() },
-                { "SubscriptionId", subscriptionId.ToString() },
-                { "WebSocketUrl", webSocketUrl },
-                { "DisconnectType", disconnectType }
-            };
-
-            if (!string.IsNullOrWhiteSpace(purpose))
-            {
-                tags["Purpose"] = purpose;
-            }
-
-            return tags;
-        }
-
         public List<SubscriptionGroupView> GetActiveSubscriptions()
         {
             return subscriptionManager.Get().Select(s => new SubscriptionGroupView
@@ -286,6 +279,19 @@ namespace Morningstar.Streaming.Client.Services
                 Format = s.Format,
                 Purpose = s.Purpose
             }).ToList();
+        }
+
+        /// <summary>Adapts a single WebSocketConsumer's consolidated observer notifications onto this subscription's own events, tagging them with the logical subscription's Guid.</summary>
+        private sealed class SubscriptionObserverRelay(Guid subscriptionGuid, CanaryService owner) : IWebSocketConsumerObserver
+        {
+            public void OnArbitrationCompleted(ArbitrationOutcome outcome) =>
+                owner.SubscriptionArbitrationCompleted?.Invoke(subscriptionGuid, outcome);
+
+            public void OnDisconnected(Guid topicGuid, string? purpose, string webSocketUrl, string disconnectType) =>
+                owner.SubscriptionDisconnected?.Invoke(subscriptionGuid, topicGuid, purpose, webSocketUrl, disconnectType);
+
+            public void OnReconnected(Guid topicGuid, string? purpose, string webSocketUrl, string previousDisconnectType) =>
+                owner.SubscriptionReconnected?.Invoke(subscriptionGuid, topicGuid, purpose, webSocketUrl, previousDisconnectType);
         }
     }
 }

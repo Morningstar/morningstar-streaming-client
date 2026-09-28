@@ -269,6 +269,202 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Admin disconnect notice with arbitration confirmed hands over cleanly")]
+        [Xunit.TraitAttribute("FeatureTitle", "Morningstar Streaming Client")]
+        [Xunit.TraitAttribute("Description", "Admin disconnect notice with arbitration confirmed hands over cleanly")]
+        public void AdminDisconnectNoticeWithArbitrationConfirmedHandsOverCleanly()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Admin disconnect notice with arbitration confirmed hands over cleanly", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 46
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 47
+        testRunner.Given("I have a valid subscribe request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 48
+            testRunner.And("the WebSocket consumer supports arbitration", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 49
+        testRunner.When("I create a subscription", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 50
+            testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 51
+            testRunner.And("an admin disconnect notice with arbitration enabled is received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 52
+            testRunner.And("the replacement connection delivers a duplicate message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 53
+            testRunner.And("the original connection is closed by the server", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 54
+        testRunner.Then("the arbitration outcome is reported as \"ConfirmedHandover\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 55
+        testRunner.And("the subscription is still active", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Admin disconnect notice hands over on natural expiry without confirmation")]
+        [Xunit.TraitAttribute("FeatureTitle", "Morningstar Streaming Client")]
+        [Xunit.TraitAttribute("Description", "Admin disconnect notice hands over on natural expiry without confirmation")]
+        public void AdminDisconnectNoticeHandsOverOnNaturalExpiryWithoutConfirmation()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Admin disconnect notice hands over on natural expiry without confirmation", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 58
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 59
+        testRunner.Given("I have a valid subscribe request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 60
+            testRunner.And("the WebSocket consumer supports arbitration", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 61
+        testRunner.When("I create a subscription", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 62
+            testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 63
+            testRunner.And("an admin disconnect notice with arbitration enabled is received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 64
+            testRunner.And("the original connection is closed by the server", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 65
+        testRunner.Then("the arbitration outcome is reported as \"UnconfirmedHandover\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 66
+        testRunner.And("the subscription is still active", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Admin disconnect notice handover ends the subscription when the replacement fails" +
+            "")]
+        [Xunit.TraitAttribute("FeatureTitle", "Morningstar Streaming Client")]
+        [Xunit.TraitAttribute("Description", "Admin disconnect notice handover ends the subscription when the replacement fails" +
+            "")]
+        public void AdminDisconnectNoticeHandoverEndsTheSubscriptionWhenTheReplacementFails()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Admin disconnect notice handover ends the subscription when the replacement fails" +
+                    "", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 69
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 70
+        testRunner.Given("I have a valid subscribe request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 71
+            testRunner.And("the WebSocket consumer supports arbitration", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 72
+        testRunner.When("I create a subscription", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 73
+            testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 74
+            testRunner.And("an admin disconnect notice with arbitration enabled is received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 75
+            testRunner.And("the replacement connection fails to establish", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 76
+            testRunner.And("the original connection is closed by the server", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 77
+        testRunner.Then("the arbitration outcome is reported as \"ReplacementConnectionFailed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 78
+        testRunner.And("the subscription is no longer active", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Admin disconnect notice without arbitration enabled does not trigger a replacemen" +
+            "t connection")]
+        [Xunit.TraitAttribute("FeatureTitle", "Morningstar Streaming Client")]
+        [Xunit.TraitAttribute("Description", "Admin disconnect notice without arbitration enabled does not trigger a replacemen" +
+            "t connection")]
+        public void AdminDisconnectNoticeWithoutArbitrationEnabledDoesNotTriggerAReplacementConnection()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Admin disconnect notice without arbitration enabled does not trigger a replacemen" +
+                    "t connection", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 81
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 82
+        testRunner.Given("I have a valid subscribe request", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 83
+            testRunner.And("the WebSocket consumer supports arbitration", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 84
+        testRunner.When("I create a subscription", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 85
+            testRunner.And("messages are successfully being received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 86
+            testRunner.And("an admin disconnect notice with arbitration disabled is received", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 87
+            testRunner.And("the original connection is closed by the server", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 88
+        testRunner.Then("no replacement connection is created", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 89
+        testRunner.And("the subscription is no longer active", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

@@ -12,9 +12,10 @@ namespace Morningstar.Streaming.Client.Services.Telemetry;
 /// </para>
 ///
 /// <para>
-/// <b>Not thread-safe.</b> Intended to be driven from a single subscription's telemetry loop
-/// (a single reader). <see cref="Process"/>, <see cref="Prune()"/>, and <see cref="Clear"/> must
-/// be called from the same thread.
+/// Thread-safe: internally synchronized so the same instance can be shared across two physical
+/// connections during an arbitration overlap window (the retiring and incoming connections each
+/// drive their own telemetry loop concurrently). Contention is expected to be rare and brief
+/// (only during handovers), so a simple lock is used rather than lock-free structures.
 /// </para>
 /// </summary>
 public class SequenceGapDetector
@@ -27,6 +28,7 @@ public class SequenceGapDetector
     private readonly int window;
     private readonly long staleThresholdMs;
     private readonly Dictionary<SequenceKey, KeyState> states = new();
+    private readonly object gate = new();
 
     // Reused across AdvanceFloor calls to avoid per-call closure allocation (safe: single-threaded).
     private long pruneFloor;
@@ -50,6 +52,14 @@ public class SequenceGapDetector
     /// PerformanceId, event type, or sequence number are reported as <see cref="SequenceFlags.Unclassified"/>.
     /// </summary>
     public void Process(string? performanceId, string? eventType, long? sequenceNumber)
+    {
+        lock (gate)
+        {
+            ProcessCore(performanceId, eventType, sequenceNumber);
+        }
+    }
+
+    private void ProcessCore(string? performanceId, string? eventType, long? sequenceNumber)
     {
         if (string.IsNullOrEmpty(performanceId) || string.IsNullOrEmpty(eventType) || sequenceNumber is null)
         {
@@ -126,6 +136,14 @@ public class SequenceGapDetector
 
     internal void Prune(long nowTick)
     {
+        lock (gate)
+        {
+            PruneCore(nowTick);
+        }
+    }
+
+    private void PruneCore(long nowTick)
+    {
         if (states.Count == 0)
         {
             return;
@@ -160,9 +178,24 @@ public class SequenceGapDetector
     }
 
     /// <summary>Drops all tracked state (used on subscription teardown).</summary>
-    public void Clear() => states.Clear();
+    public void Clear()
+    {
+        lock (gate)
+        {
+            states.Clear();
+        }
+    }
 
-    internal int KeyCount => states.Count;
+    internal int KeyCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return states.Count;
+            }
+        }
+    }
 
     private void AdvanceFloor(KeyState state, long newFloor)
     {

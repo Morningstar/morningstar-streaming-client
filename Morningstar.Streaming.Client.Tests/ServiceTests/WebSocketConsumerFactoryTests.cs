@@ -16,7 +16,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         private readonly Mock<ISequenceLogger> mockSequenceLogger;
         private readonly Mock<IWebSocketLoggerFactory> mockWsLoggerFactory;
         private readonly Mock<IStreamingApiClient> mockClient;
-        private readonly Mock<IObservableMetric<IMetric>> mockObservableMetric;
         private readonly WebSocketConsumerFactory webSocketConsumerFactory;
 
         public WebSocketConsumerFactoryTests()
@@ -29,7 +28,6 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             mockSequenceLogger = new Mock<ISequenceLogger>();
             mockWsLoggerFactory = new Mock<IWebSocketLoggerFactory>();
             mockClient = new Mock<IStreamingApiClient>();
-            mockObservableMetric = new Mock<IObservableMetric<IMetric>>();
 
             mockServiceProvider
                 .Setup(x => x.GetService(typeof(ICounterLogger)))
@@ -54,8 +52,7 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
                 mockLogger.Object,
                 mockServiceProvider.Object,
                 mockWsLoggerFactory.Object,
-                mockClient.Object,
-                mockObservableMetric.Object
+                mockClient.Object
             );
         }
 

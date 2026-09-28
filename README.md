@@ -79,8 +79,8 @@ services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 //services.AddTransient<ICounterLogger, CounterLogger>();
 //services.AddTransient<ILatencyLogger, LatencyLogger>();
 
-// Optional: If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
-//services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
+// Optional: If you want to observe disconnect and reconnect lifecycle events (e.g. to record your own metrics), uncomment the following line:
+//services.AddHostedService<WebSocketLifecycleMetricLogger>();
 
 // Register Morningstar Streaming Client services
 services.AddStreamingServices();

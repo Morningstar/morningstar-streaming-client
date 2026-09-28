@@ -283,8 +283,8 @@ services.AddSingleton<IOAuthProvider, ExampleOAuthProvider>();
 // Optional: If you want to track message sequence integrity (out-of-order, duplicate, missing, recovered, expired), uncomment the following line or replace it with your own implementation:
 //services.AddTransient<ISequenceLogger, SequenceLogger>();
 
-// Optional: If you want to observe disconnect and reconnect lifecycle metrics, uncomment the following line:
-//services.AddSingleton<IObservableMetric<IMetric>, WebSocketLifecycleMetricLogger>();
+// Optional: If you want to observe disconnect and reconnect lifecycle events (e.g. to record your own metrics), uncomment the following line:
+//services.AddHostedService<WebSocketLifecycleMetricLogger>();
 
 // Register all Morningstar Streaming Client services using the extension method
 services.AddStreamingServices();

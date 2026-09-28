@@ -1,5 +1,5 @@
-using Morningstar.Streaming.Domain;
 using Morningstar.Streaming.Client.Services.Telemetry;
+using Morningstar.Streaming.Domain;
 
 namespace Morningstar.Streaming.Client.Clients
 {
@@ -45,5 +45,50 @@ namespace Morningstar.Streaming.Client.Clients
             ICounterLogger? counterLogger,
             ILatencyLogger? latencyLogger,
             ISequenceLogger? sequenceLogger);
+
+        /// <summary>
+        /// Overload that additionally supports proactive arbitration: reacting to an Admin/Disconnect
+        /// notice before the server closes the connection, and deliberately retiring a connection with
+        /// a graceful close instead of an abort.
+        /// </summary>
+        /// <param name="onMessageAsync">
+        /// Callback invoked for each message. Returns whether the message is new (should be
+        /// recorded in sequence telemetry) - false suppresses telemetry for messages the caller
+        /// has already deduped (e.g. a cross-socket duplicate during an arbitration overlap).
+        /// </param>
+        /// <param name="onDisconnectNoticeReceived">
+        /// Invoked once, as soon as an Admin/Disconnect notice is observed on the connection -
+        /// before the server actually closes it, with the notice's NoticeMinutes value (null if not
+        /// specified). Callers can use this to proactively establish a replacement connection.
+        /// </param>
+        /// <param name="gracefulCloseToken">
+        /// When cancelled, the current connection is closed with a normal WebSocket close
+        /// handshake (instead of being aborted) and the subscription is not retried afterward.
+        /// Use this to retire a connection deliberately (e.g. after a replacement has taken over)
+        /// without affecting <paramref name="cancellationToken"/>, which still governs the whole subscription.
+        /// </param>
+        /// <param name="onDisconnected">Invoked with a classification ("Expected"/"Unexpected") whenever this connection ends. The library only reports the classification - callers decide what (if anything) to record.</param>
+        /// <param name="onReconnected">Invoked with the classification of the disconnect that preceded it, whenever a reconnect attempt succeeds.</param>
+        /// <param name="sequenceDetector">
+        /// Optional, externally-owned detector to reuse across every physical connection for this
+        /// logical subscription (including arbitration handovers), so an incoming replacement
+        /// connection isn't cold-started with no memory of what the retiring one already saw. If
+        /// null, a detector is created and torn down locally for just this one connection attempt.
+        /// </param>
+        Task SubscribeAsync(
+            Guid subscriptionId,
+            string webSocketUrl,
+            string? purpose,
+            Func<string, Task<bool>> onMessageAsync,
+            TaskCompletionSource<bool> connected,
+            CancellationToken cancellationToken,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger,
+            ISequenceLogger? sequenceLogger,
+            SequenceGapDetector? sequenceDetector,
+            Action<int?> onDisconnectNoticeReceived,
+            CancellationToken gracefulCloseToken,
+            Action<string> onDisconnected,
+            Action<string> onReconnected);
     }
 }
