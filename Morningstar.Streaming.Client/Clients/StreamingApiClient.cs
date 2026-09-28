@@ -17,6 +17,7 @@ namespace Morningstar.Streaming.Client.Clients
     {
         private const int FlushIntervalMillis = 60_000;
         private static readonly TimeSpan heartbeatAcknowledgementTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan GracefulCloseDrainTimeout = TimeSpan.FromSeconds(5);
         private readonly IApiHelper apiHelper;
         private readonly ITokenProvider tokenProvider;
         private readonly ILogger<StreamingApiClient> logger;
@@ -236,10 +237,8 @@ namespace Morningstar.Streaming.Client.Clients
                         reconnectMetricKind = null;
                     }
 
-                    // Signal connection established
                     connected.TrySetResult(true);
 
-                    // Reset attempt counter after successful connection
                     attempt = 0;
 
                     var receiveLoopResult = await StartReceiveLoopAsync(subscriptionId, ws, onMessageAsync, cancellationToken, counterLogger, latencyLogger, sequenceLogger, sequenceDetector, onDisconnectNoticeReceived, gracefulCloseToken);
@@ -259,7 +258,6 @@ namespace Morningstar.Streaming.Client.Clients
                     reconnectMetricKind = receiveLoopResult.Kind;
                     onDisconnected?.Invoke(ToDisconnectType(reconnectMetricKind.Value));
 
-                    // Connection ended gracefully - reset counter and retry
                     logger.LogInformation("WebSocket disconnected. Attempting to reconnect...");
                 }
                 catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
@@ -377,8 +375,13 @@ namespace Morningstar.Streaming.Client.Clients
             var buffer = new byte[4096];
             var lastHeartbeat = DateTime.UtcNow;
             var pendingDisconnectKind = DisconnectKind.Unexpected;
+
             using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, gracefulCloseToken);
             var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
+
+            Task? gracefulCloseTask = null;
+            using var gracefulCloseRegistration = gracefulCloseToken.Register(() =>
+                gracefulCloseTask = BeginGracefulCloseAsync(ws, shutdownCancellationTokenSource));
 
             var messageChannel = Channel.CreateUnbounded<IncomingMessage>(new UnboundedChannelOptions()
             {
@@ -417,7 +420,7 @@ namespace Morningstar.Streaming.Client.Clients
             var receivedAtMillis = 0L;
             try
             {
-                while (ws.State == WebSocketState.Open && !shutdownCancellationToken.IsCancellationRequested)
+                while ((ws.State == WebSocketState.Open || ws.State == WebSocketState.CloseSent) && !shutdownCancellationToken.IsCancellationRequested)
                 {
                     WebSocketReceiveResult result;
 
@@ -462,13 +465,15 @@ namespace Morningstar.Streaming.Client.Clients
 
                 if (retiringGracefully)
                 {
-                    await CloseWebSocketGracefullyAsync(ws);
-                }
-                else
-                {
-                    AbortWebSocket(ws);
+                    await BeginGracefulCloseAsync(ws, shutdownCancellationTokenSource);
                 }
 
+                if (gracefulCloseTask != null)
+                {
+                    await IgnoreCancellationAsync(gracefulCloseTask);
+                }
+
+                AbortWebSocket(ws);
                 await IgnoreCancellationAsync(heartbeatTask);
             }
 
@@ -476,30 +481,32 @@ namespace Morningstar.Streaming.Client.Clients
             return new ReceiveLoopResult(shouldReconnect, pendingDisconnectKind);
         }
 
-        /// <summary>
-        /// Closes a connection that is being deliberately retired (e.g. superseded by a replacement
-        /// connection) using a normal WebSocket close handshake instead of an abrupt abort.
-        /// </summary>
-        private async Task CloseWebSocketGracefullyAsync(ClientWebSocket ws)
+        /// <summary>Sends our Close frame via <see cref="ClientWebSocket.CloseOutputAsync"/> (not <c>CloseAsync</c>, which would discard in-flight messages) and keeps the receive loop draining until the server acks or <see cref="GracefulCloseDrainTimeout"/> elapses.</summary>
+        private async Task BeginGracefulCloseAsync(ClientWebSocket ws, CancellationTokenSource shutdownCancellationTokenSource)
         {
-            if (ws.State != WebSocketState.Open)
+            try
             {
-                AbortWebSocket(ws);
+                if (ws.State == WebSocketState.Open)
+                {
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Retired in favor of replacement connection", CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send graceful close frame; forcing disconnect instead.");
+                await shutdownCancellationTokenSource.CancelAsync();
                 return;
             }
 
             try
             {
-                using var closeTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Retired in favor of replacement connection", closeTimeoutCts.Token);
+                await Task.Delay(GracefulCloseDrainTimeout, shutdownCancellationTokenSource.Token);
+                logger.LogWarning("Server did not acknowledge graceful close within {Timeout}; forcing disconnect.", GracefulCloseDrainTimeout);
+                await shutdownCancellationTokenSource.CancelAsync();
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                logger.LogWarning(ex, "Graceful WebSocket close did not complete in time; aborting instead.");
-            }
-            finally
-            {
-                AbortWebSocket(ws);
+                // Receive loop already exited on its own (server's Close frame arrived, or real teardown).
             }
         }
 
