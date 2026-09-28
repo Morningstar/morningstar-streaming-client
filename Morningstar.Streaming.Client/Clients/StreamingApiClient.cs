@@ -467,10 +467,6 @@ namespace Morningstar.Streaming.Client.Clients
                 {
                     await BeginGracefulCloseAsync(ws, shutdownCancellationTokenSource);
                 }
-                else
-                {
-                    AbortWebSocket(ws);
-                }
 
                 if (gracefulCloseTask != null)
                 {
