@@ -35,7 +35,7 @@ namespace Morningstar.Streaming.Client.Clients
 
         private readonly record struct IncomingMessage(WebSocketMessageType MessageType, byte[] Payload, long ReceivedAtMillis);
 
-        private readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
+        internal readonly record struct TelemetryItem(WebSocketMessageType MessageType, string jsonMessage, long ReceivedAtMillis);
 
         private readonly record struct ReceiveLoopResult(bool ShouldReconnect, DisconnectKind Kind);
 
@@ -376,7 +376,7 @@ namespace Morningstar.Streaming.Client.Clients
             var lastHeartbeat = DateTime.UtcNow;
             var pendingDisconnectKind = DisconnectKind.Unexpected;
 
-            using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var shutdownCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, gracefulCloseToken);
             var shutdownCancellationToken = shutdownCancellationTokenSource.Token;
 
             Task? gracefulCloseTask = null;
@@ -460,7 +460,17 @@ namespace Morningstar.Streaming.Client.Clients
                 await IgnoreCancellationAsync(processorTask);
                 await IgnoreCancellationAsync(telemetryTask);
 
+                var retiringGracefully = gracefulCloseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
                 await shutdownCancellationTokenSource.CancelAsync();
+
+                if (retiringGracefully)
+                {
+                    await BeginGracefulCloseAsync(ws, shutdownCancellationTokenSource);
+                }
+                else
+                {
+                    AbortWebSocket(ws);
+                }
 
                 if (gracefulCloseTask != null)
                 {
@@ -736,6 +746,47 @@ namespace Morningstar.Streaming.Client.Clients
                 catch (Exception ex)
                 {
                     logger.LogDebug(ex, "Failed to flush telemetry on shutdown for subscription {SubscriptionId}.", subscriptionId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Processes a single telemetry item: increments the throughput counter, deserializes the
+        /// message envelope, routes market-data messages through sequence classification (Admin and
+        /// Snapshot messages are excluded via <see cref="ProcessMessageSequenceDetection"/>), and
+        /// records latency. Extracted from <see cref="TelemetryLoopAsync"/> so the per-message
+        /// routing can be exercised in isolation.
+        /// </summary>
+        internal void ProcessTelemetryItem(
+            Guid subscriptionId,
+            TelemetryItem item,
+            SequenceGapDetector? sequenceDetector,
+            ICounterLogger? counterLogger,
+            ILatencyLogger? latencyLogger)
+        {
+            counterLogger?.Increment(subscriptionId);
+
+            var messagePacket = JsonConvert.DeserializeObject<MessagePacketEnvelope>(item.jsonMessage);
+
+            if (messagePacket == null)
+            {
+                logger.LogWarning("Failed to deserialize message for telemetry. Message: {Message}", item.jsonMessage);
+                return;
+            }
+
+            if (ProcessMessageSequenceDetection(item, messagePacket))
+            {
+                sequenceDetector?.Process(messagePacket.PerformanceId, messagePacket.EventType, messagePacket.SequenceNumber);
+            }
+
+            if (messagePacket.PublishTime.HasValue && messagePacket.PublishTime.Value > 0)
+            {
+                var publishTimeMillis = messagePacket.PublishTime.Value / 1_000_000;
+                var latencyMillis = item.ReceivedAtMillis - publishTimeMillis;
+
+                if (latencyMillis >= 0)
+                {
+                    latencyLogger?.RecordLatency(subscriptionId, latencyMillis);
                 }
             }
         }
