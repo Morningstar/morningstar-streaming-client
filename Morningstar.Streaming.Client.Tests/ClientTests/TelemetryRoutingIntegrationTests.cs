@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -8,7 +9,6 @@ using Morningstar.Streaming.Client.Services.Telemetry;
 using Morningstar.Streaming.Client.Services.TokenProvider;
 using Morningstar.Streaming.Domain.Constants;
 using Newtonsoft.Json;
-using System.Net.WebSockets;
 
 namespace Morningstar.Streaming.Client.Tests.ClientTests
 {
@@ -36,8 +36,7 @@ namespace Morningstar.Streaming.Client.Tests.ClientTests
                 Mock.Of<IApiHelper>(),
                 Mock.Of<ILogger<StreamingApiClient>>(),
                 Mock.Of<ITokenProvider>(),
-                Mock.Of<IAvroBinaryDeserializer>(),
-                null);
+                Mock.Of<IAvroBinaryDeserializer>());
 
             detector = new SequenceGapDetector(subscriptionId, sequence);
         }
