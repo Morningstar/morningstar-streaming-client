@@ -1007,6 +1007,122 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
         }
 
         [Fact]
+        public async Task StartConsumingAsync_SecondSequentialHandover_StillRequiresItsOwnConfirmation()
+        {
+            // Arrange - regression test: ArbitrationCoordinator is reused across every handover for a
+            // consumer's lifetime, so a stale already-completed confirmation task from the FIRST
+            // handover must not make the SECOND one resolve as confirmed without any real proof.
+            var guid = Guid.NewGuid();
+            var wsUrl = $"wss://test.com/stream/{guid}";
+
+            var callIndex = 0;
+            var initialMessageHandler = default(Func<string, Task<bool>>);
+            var secondMessageHandler = default(Func<string, Task<bool>>);
+            var thirdMessageHandler = default(Func<string, Task<bool>>);
+            var initialRunTcs = new TaskCompletionSource();
+            var secondRunTcs = new TaskCompletionSource();
+            var secondConnectedSignal = new TaskCompletionSource();
+            var thirdConnectedSignal = new TaskCompletionSource();
+            Action<int?>? capturedFirstNotice = null;
+            Action<int?>? capturedSecondNotice = null;
+
+            mockClient
+                .Setup(x => x.SubscribeAsync(
+                    It.IsAny<Guid>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<Func<string, Task<bool>>>(),
+                    It.IsAny<TaskCompletionSource<bool>>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<ICounterLogger?>(),
+                    It.IsAny<ILatencyLogger?>(),
+                    It.IsAny<ISequenceLogger?>(),
+                    It.IsAny<SequenceGapDetector?>(),
+                    It.IsAny<Action<int?>>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<Action<string>>(),
+                    It.IsAny<Action<string>>()))
+                .Returns((Guid _, string _, string? _, Func<string, Task<bool>> onMessage, TaskCompletionSource<bool> tcs, CancellationToken token, ICounterLogger? _, ILatencyLogger? _, ISequenceLogger? _, SequenceGapDetector? _, Action<int?> onNotice, CancellationToken _, Action<string> _, Action<string> _) =>
+                {
+                    tcs.TrySetResult(true);
+
+                    switch (Interlocked.Increment(ref callIndex))
+                    {
+                        case 1:
+                            initialMessageHandler = onMessage;
+                            capturedFirstNotice = onNotice;
+                            return initialRunTcs.Task;
+                        case 2:
+                            secondMessageHandler = onMessage;
+                            capturedSecondNotice = onNotice;
+                            secondConnectedSignal.TrySetResult();
+                            return secondRunTcs.Task;
+                        default:
+                            thirdMessageHandler = onMessage;
+                            thirdConnectedSignal.TrySetResult();
+                            return Task.Delay(Timeout.Infinite, token);
+                    }
+                });
+
+            var mockObserver = new Mock<IWebSocketConsumerObserver>();
+            var capturedOutcomes = new List<ArbitrationOutcome>();
+            mockObserver
+                .Setup(o => o.OnArbitrationCompleted(It.IsAny<ArbitrationOutcome>()))
+                .Callback<ArbitrationOutcome>(outcome => capturedOutcomes.Add(outcome));
+
+            var consumer = new WebSocketConsumer(
+                mockCounterLogger.Object,
+                mockLatencyLogger.Object,
+                mockWsLoggerFactory.Object,
+                mockLogger.Object,
+                mockClient.Object,
+                wsUrl,
+                false,
+                null,
+                mockSequenceLogger.Object
+            );
+            consumer.Observer = mockObserver.Object;
+
+            using var cts = new CancellationTokenSource();
+            var connectedTcs = new TaskCompletionSource<bool>();
+
+            // Act - first handover: retiring delivers PERF-A, incoming echoes it back - genuinely confirmed.
+            var consumeTask = consumer.StartConsumingAsync(connectedTcs, cts.Token);
+            await connectedTcs.Task;
+
+            capturedFirstNotice.Should().NotBeNull();
+            capturedFirstNotice!(null);
+
+            await Task.WhenAny(secondConnectedSignal.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            const string messageA = "{\"PerformanceId\":\"PERF-A\",\"EventType\":\"Trade\",\"SequenceNumber\":1}";
+            await initialMessageHandler!(messageA);
+            await secondMessageHandler!(messageA);
+            initialRunTcs.TrySetResult();
+
+            // Second handover: retiring (the former incoming) delivers a NEW PerformanceId that the
+            // new incoming connection never echoes, then ends on its own without ever being confirmed.
+            capturedSecondNotice.Should().NotBeNull();
+            capturedSecondNotice!(null);
+
+            await Task.WhenAny(thirdConnectedSignal.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            const string messageC = "{\"PerformanceId\":\"PERF-C\",\"EventType\":\"Trade\",\"SequenceNumber\":1}";
+            await secondMessageHandler!(messageC);
+            secondRunTcs.TrySetResult();
+
+            await cts.CancelAsync();
+            await Task.WhenAny(consumeTask, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            // Assert
+            capturedOutcomes.Should().HaveCount(2);
+            capturedOutcomes[0].Confirmed.Should().BeTrue("the first handover genuinely echoed PERF-A");
+            capturedOutcomes[1].Confirmed.Should().BeFalse(
+                "PERF-C was never echoed by the second incoming connection, so this handover must not " +
+                "resolve as confirmed just because the FIRST handover's confirmation was already completed");
+        }
+
+        [Fact]
         public async Task StartConsumingAsync_WithUnexpectedDisconnection_NotifiesObserverAsRetriesExhausted()
         {
             // Arrange
