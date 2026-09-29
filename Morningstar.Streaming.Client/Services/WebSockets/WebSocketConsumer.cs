@@ -347,7 +347,7 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             private readonly ConcurrentDictionary<(string PerformanceId, string EventType, long Sequence), byte> claimed = new();
             private readonly ConcurrentDictionary<string, byte> expectedKeys = new();
             private readonly ConcurrentDictionary<string, byte> confirmedKeys = new();
-            private readonly TaskCompletionSource<bool> allKeysConfirmed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private volatile TaskCompletionSource<bool> allKeysConfirmed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             private volatile bool overlapping;
 
             public bool IsOverlapping => overlapping;
@@ -355,7 +355,11 @@ namespace Morningstar.Streaming.Client.Services.WebSockets
             /// <summary>Completes once the incoming connection has delivered a message for every PerformanceId the retiring connection delivered during the overlap.</summary>
             public Task DuplicateSeenOnIncoming => allKeysConfirmed.Task;
 
-            public void BeginOverlap() => overlapping = true;
+            public void BeginOverlap()
+            {
+                allKeysConfirmed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                overlapping = true;
+            }
 
             public void EndOverlap()
             {
