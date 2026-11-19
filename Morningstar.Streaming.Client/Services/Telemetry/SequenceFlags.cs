@@ -31,4 +31,8 @@ public enum SequenceFlags
 
     /// <summary>Message lacked the sequence number, PerformanceId, or event type needed to classify it.</summary>
     Unclassified = 1 << 6,
+
+    /// <summary>Sequence number 1 arrived for a key whose high-water mark was not already 1, indicating the
+    /// upstream source restarted its sequence. State for the key is reset and tracking resumes from 1.</summary>
+    Reset = 1 << 7,
 }

@@ -214,6 +214,66 @@ namespace Morningstar.Streaming.Client.Tests.ServiceTests
             detector.KeyCount.Should().Be(0);
         }
 
+        [Fact]
+        public void SequenceNumberOne_AfterHigherHighWaterMark_IsReset()
+        {
+            var detector = CreateDetector();
+
+            detector.Process(PerfId, EventType, 1);
+            detector.Process(PerfId, EventType, 2);
+            detector.Process(PerfId, EventType, 3);
+            detector.Process(PerfId, EventType, 1); // upstream reset
+
+            recorder.LastFlags.Should().Be(SequenceFlags.Reset);
+            recorder.LastMissing.Should().Be(0);
+
+            // Tracking resumes cleanly from the new baseline.
+            detector.Process(PerfId, EventType, 2);
+            recorder.LastFlags.Should().Be(SequenceFlags.InOrder);
+        }
+
+        [Fact]
+        public void RepeatedSequenceNumberOne_AfterReset_IsDuplicate()
+        {
+            var detector = CreateDetector();
+
+            detector.Process(PerfId, EventType, 1);
+            detector.Process(PerfId, EventType, 2);
+            detector.Process(PerfId, EventType, 1); // reset
+            detector.Process(PerfId, EventType, 1); // repeated 1 after reset
+
+            recorder.LastFlags.Should().Be(SequenceFlags.Duplicate);
+        }
+
+        [Fact]
+        public void Reset_WithOutstandingGaps_FlushesThemAsExpired()
+        {
+            var detector = CreateDetector();
+
+            detector.Process(PerfId, EventType, 1);
+            detector.Process(PerfId, EventType, 4); // 2,3 missing
+            detector.Process(PerfId, EventType, 1); // reset
+
+            recorder.Records.Should().Contain(r => r.Flags == SequenceFlags.Expired && r.MissingCount == 2);
+            recorder.LastFlags.Should().Be(SequenceFlags.Reset);
+
+            // Post-reset, high-water mark is 1 again, so 3 is a new forward gap, not a recovery.
+            detector.Process(PerfId, EventType, 3);
+            recorder.LastFlags.Should().Be(SequenceFlags.Missing);
+            recorder.LastMissing.Should().Be(1);
+        }
+
+        [Fact]
+        public void FirstMessageEverIsSequenceOne_IsNotTreatedAsReset()
+        {
+            var detector = CreateDetector();
+
+            detector.Process(PerfId, EventType, 1);
+
+            recorder.Records.Should().ContainSingle();
+            recorder.LastFlags.Should().Be(SequenceFlags.InOrder);
+        }
+
         private sealed class RecordingSequenceLogger : ISequenceLogger
         {
             public readonly List<(SequenceFlags Flags, long MissingCount)> Records = new();
