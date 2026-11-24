@@ -53,3 +53,13 @@ Feature: Sequence integrity metrics
         And a message arrives for instrument "A" event "Trade" with sequence 3
         Then a "Missing" anomaly is recorded
         And the reported missing count is 1
+
+    Scenario: A sequence number of 1 after a higher high-water mark is a reset
+        Given a sequence detector
+        When messages arrive with sequence numbers 1, 2, 3, 1
+        Then a sequence reset is recorded
+
+    Scenario: A repeated sequence number 1 after a reset is a duplicate
+        Given a sequence detector
+        When messages arrive with sequence numbers 1, 2, 1, 1
+        Then a "Duplicate" anomaly is recorded

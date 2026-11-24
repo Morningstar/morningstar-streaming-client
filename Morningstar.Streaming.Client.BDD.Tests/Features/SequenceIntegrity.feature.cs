@@ -379,6 +379,68 @@ namespace Morningstar.Streaming.Client.BDD.Tests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="A sequence number of 1 after a higher high-water mark is a reset")]
+        [Xunit.TraitAttribute("FeatureTitle", "Sequence integrity metrics")]
+        [Xunit.TraitAttribute("Description", "A sequence number of 1 after a higher high-water mark is a reset")]
+        public void ASequenceNumberOf1AfterAHigherHigh_WaterMarkIsAReset()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("A sequence number of 1 after a higher high-water mark is a reset", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 57
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 58
+        testRunner.Given("a sequence detector", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 59
+        testRunner.When("messages arrive with sequence numbers 1, 2, 3, 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 60
+        testRunner.Then("a sequence reset is recorded", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="A repeated sequence number 1 after a reset is a duplicate")]
+        [Xunit.TraitAttribute("FeatureTitle", "Sequence integrity metrics")]
+        [Xunit.TraitAttribute("Description", "A repeated sequence number 1 after a reset is a duplicate")]
+        public void ARepeatedSequenceNumber1AfterAResetIsADuplicate()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("A repeated sequence number 1 after a reset is a duplicate", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 62
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 63
+        testRunner.Given("a sequence detector", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 64
+        testRunner.When("messages arrive with sequence numbers 1, 2, 1, 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 65
+        testRunner.Then("a \"Duplicate\" anomaly is recorded", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

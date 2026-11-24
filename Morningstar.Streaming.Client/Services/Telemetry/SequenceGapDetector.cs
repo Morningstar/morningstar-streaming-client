@@ -81,6 +81,21 @@ public class SequenceGapDetector
         state.Touch();
         var hwm = state.HighWaterMark;
 
+        if (seq == 1 && hwm != 1)
+        {
+            // Upstream sequence restarted from 1: drop outstanding gaps and resume tracking from 1.
+            if (state.Missing.Count > 0)
+            {
+                logger.Record(subscriptionId, SequenceFlags.Expired, state.Missing.Count);
+                state.Missing.Clear();
+            }
+
+            state.HighWaterMark = seq;
+            state.Floor = seq - 1;
+            logger.Record(subscriptionId, SequenceFlags.Reset, 0);
+            return;
+        }
+
         if (seq == hwm + 1)
         {
             // Normal advance.
