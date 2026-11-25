@@ -60,6 +60,12 @@ public partial class SequenceIntegrityStepDefinitions
         Assert.Contains(sequenceRecorder.Records, record => (record.Flags & flag) != 0);
     }
 
+    [Then(@"a sequence reset is recorded")]
+    public void ThenASequenceResetIsRecorded()
+    {
+        Assert.Contains(sequenceRecorder.Records, record => (record.Flags & SequenceFlags.Reset) != 0);
+    }
+
     [Then(@"the reported missing count is (\d+)")]
     public void ThenTheReportedMissingCountIs(long missingCount)
     {

@@ -10,7 +10,7 @@ namespace Morningstar.Streaming.Client.Sample.Services.Telemetry;
 /// <summary>
 /// Sample <see cref="ISequenceLogger"/> implementation demonstrating how to consume the client's
 /// sequence-integrity classifications. Sequence detection (out-of-order, duplicate, missing,
-/// recovered, expired) is performed inside the client; this logger simply aggregates the classified
+/// recovered, expired, reset) is performed inside the client; this logger simply aggregates the classified
 /// results per subscription and, on each <see cref="Flush"/> (driven by the client's telemetry loop),
 /// emits counter metrics and a log line. Mirrors the structure of
 /// <see cref="CounterLogger"/> and <see cref="LatencyLogger"/>.
@@ -27,6 +27,7 @@ public class SequenceLogger : ISequenceLogger
     private readonly Counter<long> recoveredMetric = Meter.CreateCounter<long>("messages_recovered_total");
     private readonly Counter<long> expiredMetric = Meter.CreateCounter<long>("messages_missing_expired_total");
     private readonly Counter<long> unclassifiedMetric = Meter.CreateCounter<long>("messages_unclassified_total");
+    private readonly Counter<long> resetMetric = Meter.CreateCounter<long>("messages_sequence_reset_total");
 
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromMinutes(5);
 
@@ -64,10 +65,10 @@ public class SequenceLogger : ISequenceLogger
                 var id = kvp.Key;
                 var entry = kvp.Value;
 
-                var (outOfOrder, duplicate, missing, recovered, expired, unclassified) = entry.ExchangeCounts();
+                var (outOfOrder, duplicate, missing, recovered, expired, unclassified, reset) = entry.ExchangeCounts();
 
                 var hasAny = outOfOrder > 0 || duplicate > 0 || missing > 0
-                    || recovered > 0 || expired > 0 || unclassified > 0;
+                    || recovered > 0 || expired > 0 || unclassified > 0 || reset > 0;
 
                 if (hasAny)
                 {
@@ -98,10 +99,11 @@ public class SequenceLogger : ISequenceLogger
                 Emit(recoveredMetric, recovered, tags);
                 Emit(expiredMetric, expired, tags);
                 Emit(unclassifiedMetric, unclassified, tags);
+                Emit(resetMetric, reset, tags);
 
                 logger.LogInformation(
-                    "[Sequence] Subscription {SubId}: out_of_order={Ooo} duplicate={Dup} missing={Missing} recovered={Rec} expired={Exp} unclassified={Unc}",
-                    id, outOfOrder, duplicate, missing, recovered, expired, unclassified);
+                    "[Sequence] Subscription {SubId}: out_of_order={Ooo} duplicate={Dup} missing={Missing} recovered={Rec} expired={Exp} unclassified={Unc} reset={Reset} ",
+                    id, outOfOrder, duplicate, missing, recovered, expired, unclassified, reset);
             }
         }
         catch (Exception ex)
@@ -126,6 +128,7 @@ public class SequenceLogger : ISequenceLogger
         private long recovered;
         private long expired;
         private long unclassified;
+        private long reset;
 
         public DateTime LastUpdated { get; private set; } = DateTime.UtcNow;
         public string? Purpose { get; private set; }
@@ -162,15 +165,21 @@ public class SequenceLogger : ISequenceLogger
             {
                 Interlocked.Increment(ref unclassified);
             }
+
+            if ((flags & SequenceFlags.Reset) != 0)
+            {
+                Interlocked.Increment(ref reset);
+            }
         }
 
-        public (long OutOfOrder, long Duplicate, long Missing, long Recovered, long Expired, long Unclassified) ExchangeCounts() => (
+        public (long OutOfOrder, long Duplicate, long Missing, long Recovered, long Expired, long Unclassified, long Reset) ExchangeCounts() => (
             Interlocked.Exchange(ref outOfOrder, 0),
             Interlocked.Exchange(ref duplicate, 0),
             Interlocked.Exchange(ref missing, 0),
             Interlocked.Exchange(ref recovered, 0),
             Interlocked.Exchange(ref expired, 0),
-            Interlocked.Exchange(ref unclassified, 0));
+            Interlocked.Exchange(ref unclassified, 0),
+            Interlocked.Exchange(ref reset, 0));
 
         public void Touch(DateTime now) => LastUpdated = now;
 

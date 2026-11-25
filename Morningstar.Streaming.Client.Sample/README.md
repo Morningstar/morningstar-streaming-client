@@ -316,8 +316,11 @@ It emits the following counter metrics (meter name `SequenceLogger`), each tagge
 | `messages_recovered_total` | Late arrivals that filled a previously-missing sequence. |
 | `messages_missing_expired_total` | Gaps pruned unfilled, or arrivals older than the tracked window (by gap size). |
 | `messages_unclassified_total` | Messages lacking the sequence number, PerformanceId, or event type needed to classify. |
+| `messages_sequence_reset_total` | The sequence number has been reset to 1. |
 
 Provide your own `ISequenceLogger` implementation to forward these to your own metrics backend.
+
+Note that sequence numbers will be reset to 1 from time to time. This is expected behaviour and does not indicate an error.
 
 ## Common Use Cases
 
